@@ -1,0 +1,22 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name:  warehouse-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id:  warehouse-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.value.default.type: com.ecommerce.warehouse.infrastructure.adapter.in.kafka.CatalogProductEvent
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info

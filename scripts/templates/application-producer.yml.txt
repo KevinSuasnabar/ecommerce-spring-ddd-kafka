@@ -1,0 +1,6 @@
+server:
+  port: __PORT__
+
+spring:
+  application:
+    name: __MICRO__
