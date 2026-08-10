@@ -6,25 +6,28 @@ import java.util.Objects;
 public final class Category {
 
     private final CategoryId id;
+    private final CompanyId companyId;
     private String name;
     private final CategoryId parentId;
     private final Instant createdAt;
     private Instant updatedAt;
 
-    private Category(CategoryId id, String name, CategoryId parentId, Instant createdAt, Instant updatedAt) {
+    private Category(CategoryId id, CompanyId companyId, String name, CategoryId parentId, Instant createdAt, Instant updatedAt) {
         this.id = id;
+        this.companyId = companyId;
         this.name = name;
         this.parentId = parentId;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
-    public static Category create(CategoryId id, String name, CategoryId parentId) {
+    public static Category create(CategoryId id, String name, CategoryId parentId, CompanyId companyId) {
         Objects.requireNonNull(id, "id must not be null");
+        Objects.requireNonNull(companyId, "company id must not be null");
         requireNonBlank(name, "name");
 
         Instant now = Instant.now();
-        return new Category(id, name, parentId, now, now);
+        return new Category(id, companyId, name, parentId, now, now);
     }
 
     public void rename(String name) {
@@ -41,6 +44,10 @@ public final class Category {
 
     public CategoryId id() {
         return id;
+    }
+
+    public CompanyId companyId() {
+        return companyId;
     }
 
     public String name() {

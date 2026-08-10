@@ -1,5 +1,6 @@
 package com.ecommerce.catalog.domain.repository;
 
+import com.ecommerce.catalog.domain.model.CompanyId;
 import com.ecommerce.catalog.domain.model.Product;
 import com.ecommerce.catalog.domain.model.ProductId;
 
@@ -10,7 +11,7 @@ public interface ProductRepository {
 
     void save(Product product);
 
-    Optional<Product> findById(ProductId productId);
+    Optional<Product> findById(CompanyId companyId, ProductId productId);
 
-    List<Product> findAll();
+    List<Product> findAllByCompanyId(CompanyId companyId);
 }

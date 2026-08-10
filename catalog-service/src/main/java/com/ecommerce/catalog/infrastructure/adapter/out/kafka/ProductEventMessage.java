@@ -11,5 +11,6 @@ public record ProductEventMessage(
         BigDecimal price,
         String currency,
         String status,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID companyId) {
 }

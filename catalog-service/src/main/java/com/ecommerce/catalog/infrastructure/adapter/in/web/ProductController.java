@@ -12,6 +12,7 @@ import com.ecommerce.catalog.application.port.in.RetireProductUseCase;
 import com.ecommerce.catalog.application.port.in.SearchProductsUseCase;
 import com.ecommerce.catalog.application.port.in.UpdateProductUseCase;
 import com.ecommerce.catalog.domain.model.CategoryId;
+import com.ecommerce.catalog.domain.model.CompanyId;
 import com.ecommerce.catalog.domain.model.ProductId;
 import com.ecommerce.catalog.domain.model.ProductStatus;
 import jakarta.validation.Valid;
@@ -45,6 +46,7 @@ public class ProductController {
     private final SearchProductsUseCase searchProductsUseCase;
     private final AssignCategoryToProductUseCase assignCategoryToProductUseCase;
     private final RemoveCategoryFromProductUseCase removeCategoryFromProductUseCase;
+    private final CompanyContext companyContext;
 
     public ProductController(CreateProductUseCase createProductUseCase,
                              UpdateProductUseCase updateProductUseCase,
@@ -54,7 +56,8 @@ public class ProductController {
                              GetProductUseCase getProductUseCase,
                              SearchProductsUseCase searchProductsUseCase,
                              AssignCategoryToProductUseCase assignCategoryToProductUseCase,
-                             RemoveCategoryFromProductUseCase removeCategoryFromProductUseCase) {
+                             RemoveCategoryFromProductUseCase removeCategoryFromProductUseCase,
+                             CompanyContext companyContext) {
         this.createProductUseCase = createProductUseCase;
         this.updateProductUseCase = updateProductUseCase;
         this.changeProductPriceUseCase = changeProductPriceUseCase;
@@ -64,11 +67,13 @@ public class ProductController {
         this.searchProductsUseCase = searchProductsUseCase;
         this.assignCategoryToProductUseCase = assignCategoryToProductUseCase;
         this.removeCategoryFromProductUseCase = removeCategoryFromProductUseCase;
+        this.companyContext = companyContext;
     }
 
     @PostMapping
     public ResponseEntity<CreateProductResponse> create(@Valid @RequestBody CreateProductRequest request) {
-        ProductId productId = createProductUseCase.createProduct(request.toCommand());
+        CompanyId companyId = companyContext.currentCompanyId();
+        ProductId productId = createProductUseCase.createProduct(request.toCommand(companyId));
         return ResponseEntity
                 .created(URI.create(PRODUCTS_PATH + productId.value()))
                 .body(CreateProductResponse.from(productId));
@@ -76,7 +81,8 @@ public class ProductController {
 
     @GetMapping("/{productId}")
     public ResponseEntity<ProductResponse> get(@PathVariable UUID productId) {
-        ProductResponse response = ProductResponse.from(getProductUseCase.getProduct(new ProductId(productId)));
+        CompanyId companyId = companyContext.currentCompanyId();
+        ProductResponse response = ProductResponse.from(getProductUseCase.getProduct(companyId, new ProductId(productId)));
         return ResponseEntity.ok(response);
     }
 
@@ -87,13 +93,14 @@ public class ProductController {
             @RequestParam(required = false) ProductStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        CompanyId companyId = companyContext.currentCompanyId();
         SearchProductsQuery query = new SearchProductsQuery(
                 q,
                 categoryId == null ? null : new CategoryId(categoryId),
                 status,
                 page,
                 size);
-        ProductPageResult result = searchProductsUseCase.search(query);
+        ProductPageResult result = searchProductsUseCase.search(companyId, query);
         List<ProductSummaryResponse> items = result.items().stream()
                 .map(ProductSummaryResponse::from)
                 .toList();
@@ -102,37 +109,43 @@ public class ProductController {
 
     @PatchMapping("/{productId}")
     public ResponseEntity<Void> update(@PathVariable UUID productId, @Valid @RequestBody UpdateProductRequest request) {
-        updateProductUseCase.updateProduct(new ProductId(productId), request.toCommand());
+        CompanyId companyId = companyContext.currentCompanyId();
+        updateProductUseCase.updateProduct(companyId, new ProductId(productId), request.toCommand());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{productId}/price")
     public ResponseEntity<Void> changePrice(@PathVariable UUID productId, @Valid @RequestBody ChangeProductPriceRequest request) {
-        changeProductPriceUseCase.changeProductPrice(new ProductId(productId), request.toCommand());
+        CompanyId companyId = companyContext.currentCompanyId();
+        changeProductPriceUseCase.changeProductPrice(companyId, new ProductId(productId), request.toCommand());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{productId}/activate")
     public ResponseEntity<Void> activate(@PathVariable UUID productId) {
-        activateProductUseCase.activateProduct(new ProductId(productId));
+        CompanyId companyId = companyContext.currentCompanyId();
+        activateProductUseCase.activateProduct(companyId, new ProductId(productId));
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{productId}/retire")
     public ResponseEntity<Void> retire(@PathVariable UUID productId) {
-        retireProductUseCase.retireProduct(new ProductId(productId));
+        CompanyId companyId = companyContext.currentCompanyId();
+        retireProductUseCase.retireProduct(companyId, new ProductId(productId));
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{productId}/categories/{categoryId}")
     public ResponseEntity<Void> assignCategory(@PathVariable UUID productId, @PathVariable UUID categoryId) {
-        assignCategoryToProductUseCase.assignCategory(new ProductId(productId), new CategoryId(categoryId));
+        CompanyId companyId = companyContext.currentCompanyId();
+        assignCategoryToProductUseCase.assignCategory(companyId, new ProductId(productId), new CategoryId(categoryId));
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{productId}/categories/{categoryId}")
     public ResponseEntity<Void> removeCategory(@PathVariable UUID productId, @PathVariable UUID categoryId) {
-        removeCategoryFromProductUseCase.removeCategory(new ProductId(productId), new CategoryId(categoryId));
+        CompanyId companyId = companyContext.currentCompanyId();
+        removeCategoryFromProductUseCase.removeCategory(companyId, new ProductId(productId), new CategoryId(categoryId));
         return ResponseEntity.noContent().build();
     }
 }

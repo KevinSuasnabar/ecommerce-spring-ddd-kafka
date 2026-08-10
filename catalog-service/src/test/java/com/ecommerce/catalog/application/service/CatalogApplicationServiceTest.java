@@ -15,12 +15,7 @@ import com.ecommerce.catalog.domain.event.ProductPriceChangedEvent;
 import com.ecommerce.catalog.domain.exception.CategoryNotFoundException;
 import com.ecommerce.catalog.domain.exception.DuplicateCategoryException;
 import com.ecommerce.catalog.domain.exception.ProductNotFoundException;
-import com.ecommerce.catalog.domain.model.Category;
-import com.ecommerce.catalog.domain.model.CategoryId;
-import com.ecommerce.catalog.domain.model.Money;
-import com.ecommerce.catalog.domain.model.Product;
-import com.ecommerce.catalog.domain.model.ProductId;
-import com.ecommerce.catalog.domain.model.ProductStatus;
+import com.ecommerce.catalog.domain.model.*;
 import com.ecommerce.catalog.domain.repository.CategoryRepository;
 import com.ecommerce.catalog.domain.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,17 +29,19 @@ import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CatalogApplicationServiceTest {
 
     private static final Currency USD = Currency.getInstance("USD");
+    private static final CompanyId COMPANY_ID = new CompanyId(UUID.fromString("90000000-0000-0000-0000-000000000001"));
+    private static final CompanyId OTHER_COMPANY_ID = new CompanyId(UUID.fromString("90000000-0000-0000-0000-000000000002"));
 
     @Mock
     private ProductRepository productRepository;
@@ -62,7 +59,7 @@ class CatalogApplicationServiceTest {
 
     @Test
     void createProductPersistsDraftAndPublishesCreatedEvent() {
-        CreateProductCommand command = new CreateProductCommand("Notebook", "16GB", new BigDecimal("1500.00"), USD);
+        CreateProductCommand command = new CreateProductCommand(COMPANY_ID, "Notebook", "16GB", new BigDecimal("1500.00"), USD);
 
         ProductId productId = service.createProduct(command);
 
@@ -75,11 +72,11 @@ class CatalogApplicationServiceTest {
 
     @Test
     void activateProductPublishesActivatedEvent() {
-        Product product = Product.create(ProductId.newId(), "Notebook", null, new Money(new BigDecimal("1500.00"), USD));
+        Product product = Product.create(ProductId.newId(), "Notebook", null, new Money(new BigDecimal("1500.00"), USD), COMPANY_ID);
         product.pullDomainEvents();
-        when(productRepository.findById(product.id())).thenReturn(Optional.of(product));
+        when(productRepository.findById(COMPANY_ID, product.id())).thenReturn(Optional.of(product));
 
-        service.activateProduct(product.id());
+        service.activateProduct(COMPANY_ID, product.id());
 
         assertThat(product.status()).isEqualTo(ProductStatus.ACTIVE);
         verify(eventPublisher).publish(any(ProductActivatedEvent.class));
@@ -88,11 +85,11 @@ class CatalogApplicationServiceTest {
 
     @Test
     void changeProductPricePublishesPriceChangedEvent() {
-        Product product = Product.create(ProductId.newId(), "Notebook", null, new Money(new BigDecimal("1500.00"), USD));
+        Product product = Product.create(ProductId.newId(), "Notebook", null, new Money(new BigDecimal("1500.00"), USD), COMPANY_ID);
         product.pullDomainEvents();
-        when(productRepository.findById(product.id())).thenReturn(Optional.of(product));
+        when(productRepository.findById(COMPANY_ID, product.id())).thenReturn(Optional.of(product));
 
-        service.changeProductPrice(product.id(), new ChangeProductPriceCommand(new BigDecimal("1400.00"), USD));
+        service.changeProductPrice(COMPANY_ID, product.id(), new ChangeProductPriceCommand(new BigDecimal("1400.00"), USD));
 
         assertThat(product.price().amount()).isEqualByComparingTo("1400.00");
         verify(eventPublisher).publish(any(ProductPriceChangedEvent.class));
@@ -101,10 +98,34 @@ class CatalogApplicationServiceTest {
     @Test
     void getUnknownProductThrows() {
         ProductId unknown = ProductId.newId();
-        when(productRepository.findById(unknown)).thenReturn(Optional.empty());
+        when(productRepository.findById(COMPANY_ID, unknown)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getProduct(unknown))
+        assertThatThrownBy(() -> service.getProduct(COMPANY_ID, unknown))
                 .isInstanceOf(ProductNotFoundException.class);
+    }
+
+    @Test
+    void productOfAnotherCompanyIsNotVisible() {
+        Product foreign = Product.create(ProductId.newId(), "Foreign Secret", null, new Money(new BigDecimal("1500.00"), USD), OTHER_COMPANY_ID);
+        foreign.pullDomainEvents();
+        when(productRepository.findById(COMPANY_ID, foreign.id())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getProduct(COMPANY_ID, foreign.id()))
+                .isInstanceOf(ProductNotFoundException.class);
+        assertThatThrownBy(() -> service.updateProduct(COMPANY_ID, foreign.id(), new UpdateProductCommand("hacked", null)))
+                .isInstanceOf(ProductNotFoundException.class);
+    }
+
+    @Test
+    void searchOnlySeesOwnCompanyProducts() {
+        Product mine = product("Notebook", null, new Money(new BigDecimal("1500.00"), USD), ProductStatus.ACTIVE);
+        Product foreign = Product.create(ProductId.newId(), "Foreign Secret", null, new Money(new BigDecimal("1.00"), USD), OTHER_COMPANY_ID);
+        when(productRepository.findAllByCompanyId(COMPANY_ID)).thenReturn(List.of(mine));
+
+        ProductPageResult result = service.search(COMPANY_ID, new SearchProductsQuery(null, null, null, 0, 10));
+
+        assertThat(result.items()).hasSize(1);
+        assertThat(result.items().get(0).name()).isEqualTo("Notebook");
     }
 
     @Test
@@ -112,9 +133,9 @@ class CatalogApplicationServiceTest {
         Product activeNotebook = product("Notebook", null, new Money(new BigDecimal("1500.00"), USD), ProductStatus.ACTIVE);
         Product activeMouse = product("Mouse", null, new Money(new BigDecimal("50.00"), USD), ProductStatus.ACTIVE);
         Product draftNotebook = product("Notebook Pro", null, new Money(new BigDecimal("2000.00"), USD), ProductStatus.DRAFT);
-        when(productRepository.findAll()).thenReturn(List.of(activeNotebook, activeMouse, draftNotebook));
+        when(productRepository.findAllByCompanyId(COMPANY_ID)).thenReturn(List.of(activeNotebook, activeMouse, draftNotebook));
 
-        ProductPageResult result = service.search(new SearchProductsQuery("notebook", null, null, 0, 10));
+        ProductPageResult result = service.search(COMPANY_ID, new SearchProductsQuery("notebook", null, null, 0, 10));
 
         assertThat(result.items()).hasSize(2);
         assertThat(result.totalElements()).isEqualTo(2);
@@ -126,9 +147,9 @@ class CatalogApplicationServiceTest {
         Product activeNotebook = product("Notebook", null, new Money(new BigDecimal("1500.00"), USD), ProductStatus.ACTIVE);
         Product activeMouse = product("Mouse", null, new Money(new BigDecimal("50.00"), USD), ProductStatus.ACTIVE);
         Product retiredKeyboard = product("Keyboard", null, new Money(new BigDecimal("30.00"), USD), ProductStatus.RETIRED);
-        when(productRepository.findAll()).thenReturn(List.of(activeNotebook, activeMouse, retiredKeyboard));
+        when(productRepository.findAllByCompanyId(COMPANY_ID)).thenReturn(List.of(activeNotebook, activeMouse, retiredKeyboard));
 
-        ProductPageResult result = service.search(new SearchProductsQuery(null, null, ProductStatus.ACTIVE, 0, 1));
+        ProductPageResult result = service.search(COMPANY_ID, new SearchProductsQuery(null, null, ProductStatus.ACTIVE, 0, 1));
 
         assertThat(result.items()).hasSize(1);
         assertThat(result.totalElements()).isEqualTo(2);
@@ -137,28 +158,31 @@ class CatalogApplicationServiceTest {
 
     @Test
     void createCategoryRejectsDuplicateName() {
-        when(categoryRepository.existsByName("Computers")).thenReturn(true);
+        when(categoryRepository.existsByName(COMPANY_ID, "Computers")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.createCategory(new CreateCategoryCommand("Computers", null)))
+        assertThatThrownBy(() -> service.createCategory(new CreateCategoryCommand(COMPANY_ID, "Computers", null)))
                 .isInstanceOf(DuplicateCategoryException.class);
+
+        verify(categoryRepository, never()).save(any());
     }
 
     @Test
     void createCategoryHappyPath() {
-        when(categoryRepository.existsByName("Computers")).thenReturn(false);
+        when(categoryRepository.existsByName(COMPANY_ID, "Computers")).thenReturn(false);
 
-        CategoryId categoryId = service.createCategory(new CreateCategoryCommand("Computers", null));
+        CategoryId categoryId = service.createCategory(new CreateCategoryCommand(COMPANY_ID, "Computers", null));
 
         assertThat(categoryId).isNotNull();
         verify(categoryRepository).save(any(Category.class));
     }
 
     @Test
-    void getCategoriesReturnsQueryResults() {
-        Category category = Category.create(CategoryId.newId(), "Computers", null);
-        when(categoryRepository.findAll()).thenReturn(List.of(category));
+    void getCategoriesReturnsOnlyOwnCompany() {
+        Category mine = Category.create(CategoryId.newId(), "Computers", null, COMPANY_ID);
+        Category foreign = Category.create(CategoryId.newId(), "Foreign", null, OTHER_COMPANY_ID);
+        when(categoryRepository.findAllByCompanyId(COMPANY_ID)).thenReturn(List.of(mine));
 
-        List<CategoryQueryResult> categories = service.getCategories();
+        List<CategoryQueryResult> categories = service.getCategories(COMPANY_ID);
 
         assertThat(categories).hasSize(1);
         assertThat(categories.get(0).name()).isEqualTo("Computers");
@@ -166,30 +190,44 @@ class CatalogApplicationServiceTest {
 
     @Test
     void assignCategoryToUnknownCategoryThrows() {
-        Product product = Product.create(ProductId.newId(), "Notebook", null, new Money(new BigDecimal("1500.00"), USD));
+        Product product = Product.create(ProductId.newId(), "Notebook", null, new Money(new BigDecimal("1500.00"), USD), COMPANY_ID);
         CategoryId categoryId = CategoryId.newId();
-        when(productRepository.findById(product.id())).thenReturn(Optional.of(product));
-        when(categoryRepository.findById(categoryId)).thenReturn(Optional.empty());
+        when(productRepository.findById(COMPANY_ID, product.id())).thenReturn(Optional.of(product));
+        when(categoryRepository.findById(COMPANY_ID, categoryId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.assignCategory(product.id(), categoryId))
+        assertThatThrownBy(() -> service.assignCategory(COMPANY_ID, product.id(), categoryId))
                 .isInstanceOf(CategoryNotFoundException.class);
     }
 
     @Test
     void assignCategoryAssignsAndPersists() {
-        Product product = Product.create(ProductId.newId(), "Notebook", null, new Money(new BigDecimal("1500.00"), USD));
-        Category category = Category.create(CategoryId.newId(), "Computers", null);
-        when(productRepository.findById(product.id())).thenReturn(Optional.of(product));
-        when(categoryRepository.findById(category.id())).thenReturn(Optional.of(category));
+        Product product = Product.create(ProductId.newId(), "Notebook", null, new Money(new BigDecimal("1500.00"), USD), COMPANY_ID);
+        Category category = Category.create(CategoryId.newId(), "Computers", null, COMPANY_ID);
+        when(productRepository.findById(COMPANY_ID, product.id())).thenReturn(Optional.of(product));
+        when(categoryRepository.findById(COMPANY_ID, category.id())).thenReturn(Optional.of(category));
 
-        service.assignCategory(product.id(), category.id());
+        service.assignCategory(COMPANY_ID, product.id(), category.id());
 
         assertThat(product.categories()).containsExactly(category.id());
         verify(productRepository).save(product);
     }
 
+    @Test
+    void removeCategoryAssignsAndPersists(){
+        Product product = Product.create(ProductId.newId(), "Notebook", null, new Money(new BigDecimal("1500.00"), USD), COMPANY_ID);
+        Category category = Category.create(CategoryId.newId(), "Computers", null, COMPANY_ID);
+        when(productRepository.findById(COMPANY_ID, product.id())).thenReturn(Optional.of(product));
+
+        CategoryId categoryId = category.id();
+        product.assignCategory(categoryId);
+        service.removeCategory(COMPANY_ID, product.id(), categoryId);
+
+        assertThat(product.categories()).isEmpty();
+        verify(productRepository).save(product);
+    }
+
     private Product product(String name, String description, Money price, ProductStatus status) {
-        Product product = Product.create(ProductId.newId(), name, description, price);
+        Product product = Product.create(ProductId.newId(), name, description, price, COMPANY_ID);
         product.pullDomainEvents();
         if (status == ProductStatus.ACTIVE) {
             product.activate();

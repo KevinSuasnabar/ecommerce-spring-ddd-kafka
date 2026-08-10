@@ -26,12 +26,14 @@ public final class Product {
     private final List<DomainEvent> domainEvents = new ArrayList<>();
     private final Instant createdAt;
     private Instant updatedAt;
+    private final CompanyId companyId;
 
     private Product(ProductId id,
                     String name,
                     String description,
                     Money price,
                     ProductStatus status,
+                    CompanyId companyId,
                     Instant createdAt,
                     Instant updatedAt) {
         this.id = id;
@@ -39,18 +41,20 @@ public final class Product {
         this.description = description;
         this.price = price;
         this.status = status;
+        this.companyId = companyId;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
-    public static Product create(ProductId id, String name, String description, Money price) {
+    public static Product create(ProductId id, String name, String description, Money price, CompanyId companyId) {
         Objects.requireNonNull(id, "id must not be null");
         requireNonBlank(name, "name");
         Objects.requireNonNull(price, "price must not be null");
+        Objects.requireNonNull(companyId, "CompanyId must not be null");
 
         Instant now = Instant.now();
-        Product product = new Product(id, name, description, price, ProductStatus.DRAFT, now, now);
-        product.recordEvent(new ProductCreatedEvent(id, name, price, ProductStatus.DRAFT, now));
+        Product product = new Product(id, name, description, price, ProductStatus.DRAFT, companyId, now, now);
+        product.recordEvent(new ProductCreatedEvent(companyId, id, name, price, ProductStatus.DRAFT, now));
         return product;
     }
 
@@ -62,7 +66,7 @@ public final class Product {
         this.name = name;
         this.description = description;
         touch();
-        recordEvent(new ProductUpdatedEvent(id, name, price, status, updatedAt));
+        recordEvent(new ProductUpdatedEvent(companyId, id, name, price, status, updatedAt));
     }
 
     public void changePrice(Money newPrice) {
@@ -73,7 +77,7 @@ public final class Product {
         Money oldPrice = price;
         this.price = newPrice;
         touch();
-        recordEvent(new ProductPriceChangedEvent(id, name, oldPrice, newPrice, status, updatedAt));
+        recordEvent(new ProductPriceChangedEvent(companyId, id, name, oldPrice, newPrice, status, updatedAt));
     }
 
     public void activate() {
@@ -106,9 +110,9 @@ public final class Product {
         this.status = target;
         touch();
         if (target == ProductStatus.ACTIVE) {
-            recordEvent(new ProductActivatedEvent(id, name, price, status, updatedAt));
+            recordEvent(new ProductActivatedEvent(companyId, id, name, price, status, updatedAt));
         } else {
-            recordEvent(new ProductRetiredEvent(id, name, price, status, updatedAt));
+            recordEvent(new ProductRetiredEvent(companyId, id, name, price, status, updatedAt));
         }
     }
 
@@ -156,5 +160,9 @@ public final class Product {
 
     public Instant updatedAt() {
         return updatedAt;
+    }
+
+    public CompanyId companyId() {
+        return companyId;
     }
 }

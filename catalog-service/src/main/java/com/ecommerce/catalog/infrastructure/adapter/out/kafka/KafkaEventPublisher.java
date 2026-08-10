@@ -7,6 +7,7 @@ import com.ecommerce.catalog.domain.event.ProductCreatedEvent;
 import com.ecommerce.catalog.domain.event.ProductPriceChangedEvent;
 import com.ecommerce.catalog.domain.event.ProductRetiredEvent;
 import com.ecommerce.catalog.domain.event.ProductUpdatedEvent;
+import com.ecommerce.catalog.domain.model.CompanyId;
 import com.ecommerce.catalog.domain.model.Money;
 import com.ecommerce.catalog.domain.model.ProductId;
 import com.ecommerce.catalog.domain.model.ProductStatus;
@@ -33,31 +34,31 @@ public class KafkaEventPublisher implements EventPublisher {
     @Override
     public void publish(DomainEvent event) {
         ProductEventMessage message = toMessage(event);
-        kafkaTemplate.send(PRODUCT_EVENTS_TOPIC, message.productId().toString(), message);
-        log.info("Published {} to {} for product {}", message.eventType(), PRODUCT_EVENTS_TOPIC, message.productId());
+        kafkaTemplate.send(PRODUCT_EVENTS_TOPIC, message.companyId() + ":" + message.productId(), message);
+        log.info("Published {} to {} for company {} product {}", message.eventType(), PRODUCT_EVENTS_TOPIC, message.companyId(), message.productId());
     }
 
     private ProductEventMessage toMessage(DomainEvent event) {
         if (event instanceof ProductCreatedEvent e) {
-            return message("PRODUCT_CREATED", e.productId(), e.productName(), e.price(), e.status(), e.occurredAt());
+            return message("PRODUCT_CREATED", e.productId(), e.productName(), e.price(), e.status(), e.occurredAt(), e.companyId());
         }
         if (event instanceof ProductUpdatedEvent e) {
-            return message("PRODUCT_UPDATED", e.productId(), e.productName(), e.price(), e.status(), e.occurredAt());
+            return message("PRODUCT_UPDATED", e.productId(), e.productName(), e.price(), e.status(), e.occurredAt(), e.companyId());
         }
         if (event instanceof ProductPriceChangedEvent e) {
-            return message("PRODUCT_PRICE_CHANGED", e.productId(), e.productName(), e.newPrice(), e.status(), e.occurredAt());
+            return message("PRODUCT_PRICE_CHANGED", e.productId(), e.productName(), e.newPrice(), e.status(), e.occurredAt(), e.companyId());
         }
         if (event instanceof ProductActivatedEvent e) {
-            return message("PRODUCT_ACTIVATED", e.productId(), e.productName(), e.price(), e.status(), e.occurredAt());
+            return message("PRODUCT_ACTIVATED", e.productId(), e.productName(), e.price(), e.status(), e.occurredAt(), e.companyId());
         }
         if (event instanceof ProductRetiredEvent e) {
-            return message("PRODUCT_RETIRED", e.productId(), e.productName(), e.price(), e.status(), e.occurredAt());
+            return message("PRODUCT_RETIRED", e.productId(), e.productName(), e.price(), e.status(), e.occurredAt(), e.companyId());
         }
         throw new IllegalArgumentException("Unknown domain event: " + event.getClass().getName());
     }
 
     private ProductEventMessage message(String eventType, ProductId productId, String productName,
-                                        Money price, ProductStatus status, Instant occurredAt) {
+                                        Money price, ProductStatus status, Instant occurredAt, CompanyId companyId) {
         return new ProductEventMessage(
                 eventType,
                 productId.value(),
@@ -65,6 +66,7 @@ public class KafkaEventPublisher implements EventPublisher {
                 price.amount(),
                 price.currency().getCurrencyCode(),
                 status.name(),
-                occurredAt);
+                occurredAt,
+                companyId.value());
     }
 }

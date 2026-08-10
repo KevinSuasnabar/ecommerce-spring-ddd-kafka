@@ -27,10 +27,10 @@ import com.ecommerce.catalog.domain.exception.DuplicateCategoryException;
 import com.ecommerce.catalog.domain.exception.ProductNotFoundException;
 import com.ecommerce.catalog.domain.model.Category;
 import com.ecommerce.catalog.domain.model.CategoryId;
+import com.ecommerce.catalog.domain.model.CompanyId;
 import com.ecommerce.catalog.domain.model.Money;
 import com.ecommerce.catalog.domain.model.Product;
 import com.ecommerce.catalog.domain.model.ProductId;
-import com.ecommerce.catalog.domain.model.ProductStatus;
 import com.ecommerce.catalog.domain.repository.CategoryRepository;
 import com.ecommerce.catalog.domain.repository.ProductRepository;
 import org.springframework.stereotype.Service;
@@ -62,7 +62,8 @@ public class CatalogApplicationService implements CreateProductUseCase, UpdatePr
                 ProductId.newId(),
                 command.name(),
                 command.description(),
-                new Money(command.price(), command.currency()));
+                new Money(command.price(), command.currency()),
+                command.companyId());
 
         productRepository.save(product);
         publishEvents(product);
@@ -70,45 +71,45 @@ public class CatalogApplicationService implements CreateProductUseCase, UpdatePr
     }
 
     @Override
-    public void updateProduct(ProductId productId, UpdateProductCommand command) {
-        Product product = loadProduct(productId);
+    public void updateProduct(CompanyId companyId, ProductId productId, UpdateProductCommand command) {
+        Product product = loadProduct(companyId, productId);
         product.update(command.name(), command.description());
         productRepository.save(product);
         publishEvents(product);
     }
 
     @Override
-    public void changeProductPrice(ProductId productId, ChangeProductPriceCommand command) {
-        Product product = loadProduct(productId);
+    public void changeProductPrice(CompanyId companyId, ProductId productId, ChangeProductPriceCommand command) {
+        Product product = loadProduct(companyId, productId);
         product.changePrice(new Money(command.price(), command.currency()));
         productRepository.save(product);
         publishEvents(product);
     }
 
     @Override
-    public void activateProduct(ProductId productId) {
-        Product product = loadProduct(productId);
+    public void activateProduct(CompanyId companyId, ProductId productId) {
+        Product product = loadProduct(companyId, productId);
         product.activate();
         productRepository.save(product);
         publishEvents(product);
     }
 
     @Override
-    public void retireProduct(ProductId productId) {
-        Product product = loadProduct(productId);
+    public void retireProduct(CompanyId companyId, ProductId productId) {
+        Product product = loadProduct(companyId, productId);
         product.retire();
         productRepository.save(product);
         publishEvents(product);
     }
 
     @Override
-    public ProductQueryResult getProduct(ProductId productId) {
-        return ProductQueryResult.from(loadProduct(productId));
+    public ProductQueryResult getProduct(CompanyId companyId, ProductId productId) {
+        return ProductQueryResult.from(loadProduct(companyId, productId));
     }
 
     @Override
-    public ProductPageResult search(SearchProductsQuery query) {
-        List<Product> matches = productRepository.findAll().stream()
+    public ProductPageResult search(CompanyId companyId, SearchProductsQuery query) {
+        List<Product> matches = productRepository.findAllByCompanyId(companyId).stream()
                 .filter(product -> matchesKeyword(product, query.keyword()))
                 .filter(product -> query.categoryId() == null || product.categories().contains(query.categoryId()))
                 .filter(product -> query.status() == null || product.status() == query.status())
@@ -126,25 +127,25 @@ public class CatalogApplicationService implements CreateProductUseCase, UpdatePr
 
     @Override
     public CategoryId createCategory(CreateCategoryCommand command) {
-        if (categoryRepository.existsByName(command.name())) {
+        if (categoryRepository.existsByName(command.companyId(), command.name())) {
             throw new DuplicateCategoryException(command.name());
         }
-        Category category = Category.create(CategoryId.newId(), command.name(), command.parentId());
+        Category category = Category.create(CategoryId.newId(), command.name(), command.parentId(), command.companyId());
         categoryRepository.save(category);
         return category.id();
     }
 
     @Override
-    public List<CategoryQueryResult> getCategories() {
-        return categoryRepository.findAll().stream()
+    public List<CategoryQueryResult> getCategories(CompanyId companyId) {
+        return categoryRepository.findAllByCompanyId(companyId).stream()
                 .map(CategoryQueryResult::from)
                 .toList();
     }
 
     @Override
-    public void assignCategory(ProductId productId, CategoryId categoryId) {
-        Product product = loadProduct(productId);
-        if (categoryRepository.findById(categoryId).isEmpty()) {
+    public void assignCategory(CompanyId companyId, ProductId productId, CategoryId categoryId) {
+        Product product = loadProduct(companyId, productId);
+        if (categoryRepository.findById(companyId, categoryId).isEmpty()) {
             throw new CategoryNotFoundException(categoryId);
         }
         product.assignCategory(categoryId);
@@ -152,8 +153,8 @@ public class CatalogApplicationService implements CreateProductUseCase, UpdatePr
     }
 
     @Override
-    public void removeCategory(ProductId productId, CategoryId categoryId) {
-        Product product = loadProduct(productId);
+    public void removeCategory(CompanyId companyId, ProductId productId, CategoryId categoryId) {
+        Product product = loadProduct(companyId, productId);
         product.removeCategory(categoryId);
         productRepository.save(product);
     }
@@ -167,8 +168,8 @@ public class CatalogApplicationService implements CreateProductUseCase, UpdatePr
                 || (product.description() != null && product.description().toLowerCase(Locale.ROOT).contains(lower));
     }
 
-    private Product loadProduct(ProductId productId) {
-        return productRepository.findById(productId)
+    private Product loadProduct(CompanyId companyId, ProductId productId) {
+        return productRepository.findById(companyId, productId)
                 .orElseThrow(() -> new ProductNotFoundException(productId));
     }
 
