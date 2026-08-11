@@ -184,9 +184,13 @@ Cobertura: `./mvnw verify` genera el reporte en `target/site/jacoco/index.html`.
 
 ## Contexto del ecosistema
 
-Este es uno de los micros del ecommerce. Construidos hasta ahora: `order-service`
-(este micro) y `catalog-service` (fuente de verdad de productos, publica sus eventos
-a Kafka). Pendientes: `cart`, `inventory`, `payment`, `customer`, `shipment`,
-`notification`, más capa transversal (API Gateway, Service Discovery, Config Server)
-y patrones entre micros: *database-per-service*, *event-driven* (ya aplicado acá) y
-*Saga* para el flujo de compra.
+Este es uno de los micros del ecommerce. Construidos: `order-service` (este
+micro), `catalog-service` (fuente de verdad de productos, publica sus eventos a
+Kafka) y `warehouse-service` (esqueleto, segundo consumidor). El endgame es
+**cerrar en estos 3 micros** y luego la capa transversal: patrón **Outbox**,
+**idempotencia** del consumidor, **Saga** para el flujo de compra y API Gateway.
+Ver [../PLAN.md](../PLAN.md).
+
+> **Próximo paso de este micro**: tenancy. El evento ya trae `companyId` (y la key
+> del topic es `companyId:productId`), pero el snapshot y las órdenes todavía son
+> ciegos al tenant. Falta aplicar el patrón `CompanyContext` que catalog ya usa.

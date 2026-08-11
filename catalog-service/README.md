@@ -47,7 +47,16 @@ curl -s -X POST http://localhost:8082/api/products/<id>/retire      # -> 204
 ## Contrato del topic `catalog.products`
 
 Los eventos se serializan como JSON plano (**sin `__TypeId__`** de Jackson): cada
-micro define su propia clase del contrato, así no comparten código. El payload:
+micro define su propia clase del contrato, así no comparten código.
+
+- **Key** del mensaje: `companyId:productId` → misma key, misma partición, orden
+  garantizado por tenant.
+- **Fechas ISO-8601**: el producer usa `IsoDateJsonSerializer` (mapper con
+  `WRITE_DATES_AS_TIMESTAMPS` desactivado). El `JsonSerializer` default de Spring
+  Boot serializa `Instant` como epoch en notación científica — eso rompía el
+  contrato. `CatalogProductContractIT` fija ambas cosas en piedra.
+
+El payload:
 
 ```json
 {
@@ -57,7 +66,8 @@ micro define su propia clase del contrato, así no comparten código. El payload
   "price": 1300.00,
   "currency": "USD",
   "status": "DRAFT | ACTIVE | RETIRED",
-  "occurredAt": "<instant>"
+  "occurredAt": "2026-08-10T12:00:00Z",
+  "companyId": "uuid"
 }
 ```
 
@@ -104,6 +114,7 @@ de uso no se tocan.
 | **Máquina de estados** | `ProductStatus` valida transiciones: `DRAFT → ACTIVE → RETIRED` (y `RETIRED` terminal) |
 | **Eventos de dominio** | `ProductCreated`, `ProductUpdated`, `ProductPriceChanged`, `ProductActivated`, `ProductRetired` |
 | **Categorías jerárquicas** | `Category` con `parentId`, sin ciclos (validado por el dominio) |
+| **Tenancy** | `CompanyId` (value object) en `Product` y `Category`; repositorios escopados por company; el tenant entra por el seam `CompanyContext` en el adapter web |
 
 ## Tests
 
@@ -114,6 +125,8 @@ de uso no se tocan.
 | `infrastructure/adapter/in/web/*ControllerTest` | Slice web: 201/400/404, validación y search paginado |
 | `CatalogServiceIntegrationTest` | End-to-end por la API con el publisher mockeado |
 | `KafkaEventPublisherIT` | **Con Kafka real (Testcontainers)**: publica y verifica el evento con nombre/precio/status correctos |
+| `KafkaPartitioningIT` | **Con Kafka real**: verifica el particionado por key (`companyId:productId`) |
+| `CatalogProductContractIT` | **Prueba de contrato (consumer-driven)**: el JSON publicado tiene los campos que order espera, fechas ISO-8601 y key `companyId:productId` |
 
 ## Cómo evolucionar el ejemplo
 
@@ -123,9 +136,10 @@ de uso no se tocan.
 
 ## Contexto del ecosistema
 
-Este es uno de los micros del ecommerce. Construidos hasta ahora: `catalog-service`
-(este micro) y `order-service` (consume los eventos de `catalog.products` para
-mantener su snapshot y resolver precios al crear órdenes). Pendientes: `cart`,
-`inventory`, `payment`, `customer`, `shipment`, `notification`, más capa transversal
-(API Gateway, Service Discovery, Config Server) y patrones entre micros:
-*database-per-service*, *event-driven* (ya aplicado) y *Saga*.
+Este es uno de los micros del ecommerce. Construidos: `catalog-service` (este
+micro), `order-service` (consume `catalog.products` para mantener su snapshot y
+resolver precios al crear órdenes) y `warehouse-service` (esqueleto, segundo
+consumidor). El endgame es **cerrar en estos 3 micros** y luego la capa
+transversal: patrón **Outbox** (hoy se publica directo a Kafka, sin transacción),
+**idempotencia** del consumidor, **Saga** para el flujo de compra y API Gateway.
+Ver [../PLAN.md](../PLAN.md).

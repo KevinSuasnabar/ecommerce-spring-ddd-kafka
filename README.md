@@ -11,23 +11,42 @@ entendiendo el *porqué* de cada decisión antes que el *cómo*.
 |---|---|---|---|
 | `catalog-service` | 8082 | Fuente de verdad del catálogo. CRUD de productos, search paginado, categorías jerárquicas, máquina de estados DRAFT/ACTIVE/RETIRED. **Publica** eventos al topic `catalog.products` | ✅ |
 | `order-service` | 8081 | Órdenes con ciclo de vida (created → confirmed → shipped → delivered). **Consume** `catalog.products` y mantiene un snapshot para resolver nombre/precio sin llamar a catalog por HTTP | ✅ |
-| `cart`, `inventory`, `payment`, `customer`, `shipment`, `notification` | — | Pendientes (plan) | ⏳ |
+| `warehouse-service` | 8083 | Stock. Segundo consumidor de `catalog.products` (read model de inventario) | 🚧 esqueleto |
+
+> **Endgame**: cerrar en estos 3 micros + capa transversal (Outbox, idempotencia,
+> Saga, API Gateway). Ver [PLAN.md](PLAN.md) — no se agregan más micros.
 
 ## Comunicación entre micros (event-driven)
 
 ```
 catalog-service ──► Kafka (topic catalog.products) ──► order-service
-   create/update       { eventType, productId,             CatalogEventConsumer
-   price/activate/        productName, price,                  │
-   retire                 currency, status, occurredAt }      ▼
-                                                    snapshot local (read model)
+   create/update       key: companyId:productId          CatalogEventConsumer
+   price/activate/     { eventType, productId,              │
+   retire                productName, price, currency,      ▼
+                         status, occurredAt(ISO-8601),   snapshot local (read model)
+                         companyId }
 ```
 
 - **Sin llamadas HTTP síncronas** entre micros: el contrato es el **evento del topic**.
 - Cada micro define su propia clase del contrato (**sin type headers de Jackson**),
   así no comparten código ni se acoplan.
+- **Key `companyId:productId`** → todos los eventos de un tenant caen en la misma
+  partición **en orden** (contrato fijado por `CatalogProductContractIT`).
+- **Fechas ISO-8601** en el wire (el producer usa `IsoDateJsonSerializer`).
 - La consistencia es **eventual**: el snapshot de order se actualiza cuando el evento llega.
 - Las órdenes **congelan el precio** en el momento de la compra.
+
+## Multi-tenancy
+
+Tenancy **row-level** por `CompanyId` (value object del dominio). El tenant se
+resuelve en el borde HTTP vía el seam `CompanyContext` (adapter web) y se propaga
+como argumento explícito hasta el dominio y los repositorios escopados.
+
+| Micro | Estado |
+|---|---|
+| `catalog-service` | ✅ productos y categorías escopados por company |
+| `order-service` | ⏳ pendiente (el evento ya trae `companyId`; falta aplicarlo) |
+| `warehouse-service` | ⏳ se construye ya con tenancy |
 
 ## Stack compartido
 
@@ -77,15 +96,20 @@ curl -s -X POST http://localhost:8081/api/orders \
 
 ```
 hexagonal-micro/
-├── docker-compose.yml      # Kafka KRaft (single node, puerto 9092, auto-create topics)
-├── catalog-service/        # README propio, puro productor de eventos
-└── order-service/          # README propio, consumidor + snapshot read model
+├── PLAN.md                   # roadmap vigente, estado, contratos y deuda
+├── AGENTS.md                 # convenciones e invariants para agentes de IA
+├── docker-compose.yml        # Kafka KRaft (single node, puerto 9092, auto-create topics)
+├── scripts/create-micro.sh   # scaffolder de micros hexagonal (plantillas en scripts/templates)
+├── catalog-service/          # README propio, puro productor de eventos
+├── order-service/            # README propio, consumidor + snapshot read model
+└── warehouse-service/        # esqueleto, segundo consumidor (stock)
 ```
 
-## Siguiente micro del plan
+## Roadmap
 
-`cart` o `inventory` (candidatos), luego la capa transversal (API Gateway, Service
-Discovery, Config Server) y el patrón **Saga** para el flujo de compra completo.
+El plan completo (estado, contratos, deuda técnica y próximos pasos) vive en
+**[PLAN.md](PLAN.md)**. Resumen: tenancy en order → warehouse desde cero → capa
+transversal (Outbox, idempotencia, Saga, Gateway) → CI.
 
 ## Detalle de cada micro
 
