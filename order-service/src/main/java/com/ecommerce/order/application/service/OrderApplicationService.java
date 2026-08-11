@@ -22,6 +22,7 @@ import com.ecommerce.order.domain.exception.OrderNotFoundException;
 import com.ecommerce.order.domain.exception.PaymentRejectedException;
 import com.ecommerce.order.domain.exception.ProductNotAvailableException;
 import com.ecommerce.order.domain.event.DomainEvent;
+import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.Order;
 import com.ecommerce.order.domain.model.OrderId;
 import com.ecommerce.order.domain.model.OrderLine;
@@ -59,9 +60,10 @@ public class OrderApplicationService
 
     @Override
     public OrderId createOrder(CreateOrderCommand command) {
+        CompanyId companyId = command.companyId();
         List<OrderLine> lines = command.lines().stream()
                 .map(line -> {
-                    CatalogProduct product = catalogProductStore.findById(line.productId())
+                    CatalogProduct product = catalogProductStore.findById(companyId, line.productId())
                             .filter(CatalogProduct::canBeOrdered)
                             .orElseThrow(() -> new ProductNotAvailableException(line.productId()));
                     return new OrderLine(
@@ -77,7 +79,8 @@ public class OrderApplicationService
                 command.customerId(),
                 lines,
                 command.shippingAddress(),
-                command.paymentMethod());
+                command.paymentMethod(),
+                companyId);
 
         orderRepository.save(order);
         publishEvents(order);
@@ -86,8 +89,8 @@ public class OrderApplicationService
     }
 
     @Override
-    public void confirmOrder(OrderId orderId) {
-        Order order = loadOrder(orderId);
+    public void confirmOrder(CompanyId companyId, OrderId orderId) {
+        Order order = loadOrder(companyId, orderId);
         ensureTransitionAllowed(order, OrderStatus.CONFIRMED);
 
         reserveInventory(order);
@@ -103,8 +106,8 @@ public class OrderApplicationService
     }
 
     @Override
-    public void shipOrder(OrderId orderId) {
-        Order order = loadOrder(orderId);
+    public void shipOrder(CompanyId companyId, OrderId orderId) {
+        Order order = loadOrder(companyId, orderId);
         order.ship();
         orderRepository.save(order);
         publishEvents(order);
@@ -112,8 +115,8 @@ public class OrderApplicationService
     }
 
     @Override
-    public void deliverOrder(OrderId orderId) {
-        Order order = loadOrder(orderId);
+    public void deliverOrder(CompanyId companyId, OrderId orderId) {
+        Order order = loadOrder(companyId, orderId);
         order.deliver();
         orderRepository.save(order);
         publishEvents(order);
@@ -121,8 +124,8 @@ public class OrderApplicationService
     }
 
     @Override
-    public void cancelOrder(CancelOrderCommand command) {
-        Order order = loadOrder(command.orderId());
+    public void cancelOrder(CompanyId companyId, CancelOrderCommand command) {
+        Order order = loadOrder(companyId, command.orderId());
         order.cancel(command.reason());
         orderRepository.save(order);
         publishEvents(order);
@@ -130,12 +133,12 @@ public class OrderApplicationService
     }
 
     @Override
-    public OrderQueryResult getOrder(OrderId orderId) {
-        return OrderQueryResult.from(loadOrder(orderId));
+    public OrderQueryResult getOrder(CompanyId companyId, OrderId orderId) {
+        return OrderQueryResult.from(loadOrder(companyId, orderId));
     }
 
-    private Order loadOrder(OrderId orderId) {
-        return orderRepository.findById(orderId)
+    private Order loadOrder(CompanyId companyId, OrderId orderId) {
+        return orderRepository.findById(companyId, orderId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
     }
 

@@ -2,28 +2,31 @@ package com.ecommerce.order.infrastructure.adapter.out.catalog;
 
 import com.ecommerce.order.application.dto.CatalogProduct;
 import com.ecommerce.order.application.port.out.CatalogProductStore;
+import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.ProductId;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 @Component
 public class InMemoryCatalogProductStore implements CatalogProductStore {
 
-    private final ConcurrentMap<UUID, CatalogProduct> products = new ConcurrentHashMap<>();
+    private record Key(CompanyId companyId, ProductId productId) {
+    }
+
+    private final ConcurrentMap<Key, CatalogProduct> products = new ConcurrentHashMap<>();
 
     @Override
     public void upsert(CatalogProduct product) {
-        products.put(product.productId().value(), product);
+        products.put(new Key(product.companyId(), product.productId()), product);
     }
 
     @Override
-    public Optional<CatalogProduct> findById(ProductId productId) {
-        return Optional.ofNullable(products.get(productId.value()));
+    public Optional<CatalogProduct> findById(CompanyId companyId, ProductId productId) {
+        return Optional.ofNullable(products.get(new Key(companyId, productId)));
     }
 
     public List<CatalogProduct> findAll() {

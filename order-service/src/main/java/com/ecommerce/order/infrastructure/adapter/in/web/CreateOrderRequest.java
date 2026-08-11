@@ -2,6 +2,7 @@ package com.ecommerce.order.infrastructure.adapter.in.web;
 
 import com.ecommerce.order.application.dto.CreateOrderCommand;
 import com.ecommerce.order.domain.model.Address;
+import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.CustomerId;
 import com.ecommerce.order.domain.model.PaymentMethod;
 import com.ecommerce.order.domain.model.ProductId;
@@ -20,8 +21,9 @@ public record CreateOrderRequest(
         @NotNull @Valid AddressRequest shippingAddress,
         @NotNull PaymentMethod paymentMethod) {
 
-    public CreateOrderCommand toCommand() {
+    public CreateOrderCommand toCommand(CompanyId companyId) {
         return new CreateOrderCommand(
+                companyId,
                 new CustomerId(customerId),
                 shippingAddress.toDomain(),
                 lines.stream().map(LineRequest::toCommand).toList(),

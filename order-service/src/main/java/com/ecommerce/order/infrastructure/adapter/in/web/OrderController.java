@@ -7,6 +7,7 @@ import com.ecommerce.order.application.port.in.CreateOrderUseCase;
 import com.ecommerce.order.application.port.in.DeliverOrderUseCase;
 import com.ecommerce.order.application.port.in.GetOrderUseCase;
 import com.ecommerce.order.application.port.in.ShipOrderUseCase;
+import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.OrderId;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -32,24 +33,28 @@ public class OrderController {
     private final DeliverOrderUseCase deliverOrderUseCase;
     private final CancelOrderUseCase cancelOrderUseCase;
     private final GetOrderUseCase getOrderUseCase;
+    private final CompanyContext companyContext;
 
     public OrderController(CreateOrderUseCase createOrderUseCase,
                            ConfirmOrderUseCase confirmOrderUseCase,
                            ShipOrderUseCase shipOrderUseCase,
                            DeliverOrderUseCase deliverOrderUseCase,
                            CancelOrderUseCase cancelOrderUseCase,
-                           GetOrderUseCase getOrderUseCase) {
+                           GetOrderUseCase getOrderUseCase,
+                           CompanyContext companyContext) {
         this.createOrderUseCase = createOrderUseCase;
         this.confirmOrderUseCase = confirmOrderUseCase;
         this.shipOrderUseCase = shipOrderUseCase;
         this.deliverOrderUseCase = deliverOrderUseCase;
         this.cancelOrderUseCase = cancelOrderUseCase;
         this.getOrderUseCase = getOrderUseCase;
+        this.companyContext = companyContext;
     }
 
     @PostMapping
     public ResponseEntity<CreateOrderResponse> create(@Valid @RequestBody CreateOrderRequest request) {
-        OrderId orderId = createOrderUseCase.createOrder(request.toCommand());
+        CompanyId companyId = companyContext.currentCompanyId();
+        OrderId orderId = createOrderUseCase.createOrder(request.toCommand(companyId));
         return ResponseEntity
                 .created(URI.create(ORDERS_PATH + orderId.value()))
                 .body(CreateOrderResponse.from(orderId));
@@ -57,31 +62,33 @@ public class OrderController {
 
     @GetMapping("/{orderId}")
     public ResponseEntity<OrderResponse> get(@PathVariable UUID orderId) {
-        OrderResponse response = OrderResponse.from(getOrderUseCase.getOrder(new OrderId(orderId)));
+        CompanyId companyId = companyContext.currentCompanyId();
+        OrderResponse response = OrderResponse.from(getOrderUseCase.getOrder(companyId, new OrderId(orderId)));
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{orderId}/confirm")
     public ResponseEntity<Void> confirm(@PathVariable UUID orderId) {
-        confirmOrderUseCase.confirmOrder(new OrderId(orderId));
+        confirmOrderUseCase.confirmOrder(companyContext.currentCompanyId(), new OrderId(orderId));
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{orderId}/ship")
     public ResponseEntity<Void> ship(@PathVariable UUID orderId) {
-        shipOrderUseCase.shipOrder(new OrderId(orderId));
+        shipOrderUseCase.shipOrder(companyContext.currentCompanyId(), new OrderId(orderId));
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{orderId}/deliver")
     public ResponseEntity<Void> deliver(@PathVariable UUID orderId) {
-        deliverOrderUseCase.deliverOrder(new OrderId(orderId));
+        deliverOrderUseCase.deliverOrder(companyContext.currentCompanyId(), new OrderId(orderId));
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{orderId}/cancel")
     public ResponseEntity<Void> cancel(@PathVariable UUID orderId, @Valid @RequestBody CancelOrderRequest request) {
-        cancelOrderUseCase.cancelOrder(new CancelOrderCommand(new OrderId(orderId), request.reason()));
+        cancelOrderUseCase.cancelOrder(companyContext.currentCompanyId(),
+                new CancelOrderCommand(new OrderId(orderId), request.reason()));
         return ResponseEntity.noContent().build();
     }
 }

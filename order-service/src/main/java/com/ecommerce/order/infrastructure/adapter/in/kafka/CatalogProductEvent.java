@@ -11,5 +11,6 @@ public record CatalogProductEvent(
         BigDecimal price,
         String currency,
         String status,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID companyId) {
 }

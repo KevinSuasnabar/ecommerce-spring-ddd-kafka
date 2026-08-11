@@ -26,6 +26,7 @@ public final class Order {
     private final List<DomainEvent> domainEvents = new ArrayList<>();
     private final Instant createdAt;
     private Instant updatedAt;
+    private final CompanyId companyId;
 
     private Order(OrderId id,
                   CustomerId customerId,
@@ -33,6 +34,7 @@ public final class Order {
                   Address shippingAddress,
                   PaymentMethod paymentMethod,
                   OrderStatus status,
+                  CompanyId companyId,
                   Instant createdAt,
                   Instant updatedAt) {
         this.id = id;
@@ -42,6 +44,7 @@ public final class Order {
         this.shippingAddress = shippingAddress;
         this.paymentMethod = paymentMethod;
         this.status = status;
+        this.companyId = companyId;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -50,7 +53,8 @@ public final class Order {
                                CustomerId customerId,
                                List<OrderLine> lines,
                                Address shippingAddress,
-                               PaymentMethod paymentMethod) {
+                               PaymentMethod paymentMethod,
+                               CompanyId companyId) {
         Objects.requireNonNull(id, "id must not be null");
         Objects.requireNonNull(customerId, "customerId must not be null");
         if (lines.isEmpty()) {
@@ -58,27 +62,28 @@ public final class Order {
         }
         Objects.requireNonNull(shippingAddress, "shippingAddress must not be null");
         Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
+        Objects.requireNonNull(companyId, "companyId must not be null");
 
         Instant now = Instant.now();
         Order order = new Order(id, customerId, lines, shippingAddress, paymentMethod,
-                OrderStatus.CREATED, now, now);
-        order.recordEvent(new OrderCreatedEvent(id, now));
+                OrderStatus.CREATED, companyId, now, now);
+        order.recordEvent(new OrderCreatedEvent(id, companyId, now));
         return order;
     }
 
     public void confirm() {
         transitionTo(OrderStatus.CONFIRMED);
-        recordEvent(new OrderConfirmedEvent(id, updatedAt));
+        recordEvent(new OrderConfirmedEvent(id, companyId, updatedAt));
     }
 
     public void ship() {
         transitionTo(OrderStatus.SHIPPED);
-        recordEvent(new OrderShippedEvent(id, updatedAt));
+        recordEvent(new OrderShippedEvent(id, companyId, updatedAt));
     }
 
     public void deliver() {
         transitionTo(OrderStatus.DELIVERED);
-        recordEvent(new OrderDeliveredEvent(id, updatedAt));
+        recordEvent(new OrderDeliveredEvent(id, companyId, updatedAt));
     }
 
     public void cancel(String reason) {
@@ -86,7 +91,7 @@ public final class Order {
             throw new IllegalArgumentException("cancellation reason must not be blank");
         }
         transitionTo(OrderStatus.CANCELLED);
-        recordEvent(new OrderCancelledEvent(id, reason, updatedAt));
+        recordEvent(new OrderCancelledEvent(id, companyId, reason, updatedAt));
     }
 
     public List<DomainEvent> pullDomainEvents() {
@@ -120,6 +125,10 @@ public final class Order {
 
     public CustomerId customerId() {
         return customerId;
+    }
+
+    public CompanyId companyId() {
+        return companyId;
     }
 
     public List<OrderLine> lines() {

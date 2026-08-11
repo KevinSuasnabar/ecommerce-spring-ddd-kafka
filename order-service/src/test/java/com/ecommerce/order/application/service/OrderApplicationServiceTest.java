@@ -19,6 +19,7 @@ import com.ecommerce.order.domain.exception.PaymentRejectedException;
 import com.ecommerce.order.domain.exception.ProductNotAvailableException;
 import com.ecommerce.order.domain.model.Address;
 import com.ecommerce.order.domain.model.CatalogProductStatus;
+import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.CustomerId;
 import com.ecommerce.order.domain.model.Money;
 import com.ecommerce.order.domain.model.Order;
@@ -54,6 +55,8 @@ import static org.mockito.Mockito.when;
 class OrderApplicationServiceTest {
 
     private static final Currency USD = Currency.getInstance("USD");
+    private static final CompanyId COMPANY = new CompanyId(UUID.fromString("80000000-0000-0000-0000-000000000001"));
+    private static final CompanyId OTHER_COMPANY = new CompanyId(UUID.fromString("80000000-0000-0000-0000-000000000002"));
     private static final CustomerId CUSTOMER = new CustomerId(UUID.fromString("90000000-0000-0000-0000-000000000001"));
     private static final Address ADDRESS = new Address("Av. Siempre Viva 123", "Springfield", null, "AR", "1406");
     private static final ProductId PRODUCT = new ProductId(UUID.fromString("10000000-0000-0000-0000-000000000001"));
@@ -80,7 +83,7 @@ class OrderApplicationServiceTest {
 
     @Test
     void createOrderPersistsAndPublishesCreatedEvent() {
-        when(catalogProductStore.findById(PRODUCT)).thenReturn(Optional.of(activeCatalogProduct()));
+        when(catalogProductStore.findById(COMPANY, PRODUCT)).thenReturn(Optional.of(activeCatalogProduct()));
         CreateOrderCommand command = validCreateCommand();
 
         OrderId orderId = service.createOrder(command);
@@ -88,6 +91,7 @@ class OrderApplicationServiceTest {
         ArgumentCaptor<Order> savedOrder = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(savedOrder.capture());
         assertThat(savedOrder.getValue().id()).isEqualTo(orderId);
+        assertThat(savedOrder.getValue().companyId()).isEqualTo(COMPANY);
         assertThat(savedOrder.getValue().status()).isEqualTo(OrderStatus.CREATED);
         assertThat(savedOrder.getValue().total().amount()).isEqualByComparingTo("3000.00");
         verify(eventPublisher).publish(any(OrderCreatedEvent.class));
@@ -96,7 +100,7 @@ class OrderApplicationServiceTest {
 
     @Test
     void createOrderWithUnknownProductRejectsWithoutSaving() {
-        when(catalogProductStore.findById(PRODUCT)).thenReturn(Optional.empty());
+        when(catalogProductStore.findById(COMPANY, PRODUCT)).thenReturn(Optional.empty());
         CreateOrderCommand command = validCreateCommand();
 
         assertThatThrownBy(() -> service.createOrder(command))
@@ -107,9 +111,21 @@ class OrderApplicationServiceTest {
     }
 
     @Test
+    void createOrderWithProductFromAnotherCompanyIsRejected() {
+        when(catalogProductStore.findById(COMPANY, PRODUCT)).thenReturn(Optional.empty());
+        CreateOrderCommand command = validCreateCommand();
+
+        assertThatThrownBy(() -> service.createOrder(command))
+                .isInstanceOf(ProductNotAvailableException.class);
+
+        verify(catalogProductStore, never()).findById(OTHER_COMPANY, PRODUCT);
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
     void createOrderWithNonActiveProductRejectsWithoutSaving() {
-        when(catalogProductStore.findById(PRODUCT))
-                .thenReturn(Optional.of(new CatalogProduct(PRODUCT, "Notebook",
+        when(catalogProductStore.findById(COMPANY, PRODUCT))
+                .thenReturn(Optional.of(new CatalogProduct(COMPANY, PRODUCT, "Notebook",
                         new Money(new BigDecimal("1500.00"), USD), CatalogProductStatus.DRAFT, Instant.now())));
         CreateOrderCommand command = validCreateCommand();
 
@@ -123,11 +139,11 @@ class OrderApplicationServiceTest {
     @Test
     void confirmOrderChargesPaymentAndTransitionsToConfirmed() {
         Order order = createdOrder();
-        when(orderRepository.findById(order.id())).thenReturn(Optional.of(order));
+        when(orderRepository.findById(COMPANY, order.id())).thenReturn(Optional.of(order));
         when(inventoryPort.reserve(any(), anyInt())).thenReturn(true);
         when(paymentPort.charge(any(), any())).thenReturn(PaymentResult.approved("CC-1"));
 
-        service.confirmOrder(order.id());
+        service.confirmOrder(COMPANY, order.id());
 
         assertThat(order.status()).isEqualTo(OrderStatus.CONFIRMED);
         verify(paymentPort).charge(order.total(), PaymentMethod.CREDIT_CARD);
@@ -138,11 +154,11 @@ class OrderApplicationServiceTest {
     @Test
     void confirmOrderWithRejectedPaymentLeavesOrderCreated() {
         Order order = createdOrder();
-        when(orderRepository.findById(order.id())).thenReturn(Optional.of(order));
+        when(orderRepository.findById(COMPANY, order.id())).thenReturn(Optional.of(order));
         when(inventoryPort.reserve(any(), anyInt())).thenReturn(true);
         when(paymentPort.charge(any(), any())).thenReturn(PaymentResult.rejected());
 
-        assertThatThrownBy(() -> service.confirmOrder(order.id()))
+        assertThatThrownBy(() -> service.confirmOrder(COMPANY, order.id()))
                 .isInstanceOf(PaymentRejectedException.class);
 
         assertThat(order.status()).isEqualTo(OrderStatus.CREATED);
@@ -152,10 +168,10 @@ class OrderApplicationServiceTest {
     @Test
     void confirmOrderWithInsufficientStockSkipsPayment() {
         Order order = createdOrder();
-        when(orderRepository.findById(order.id())).thenReturn(Optional.of(order));
+        when(orderRepository.findById(COMPANY, order.id())).thenReturn(Optional.of(order));
         when(inventoryPort.reserve(any(), anyInt())).thenReturn(false);
 
-        assertThatThrownBy(() -> service.confirmOrder(order.id()))
+        assertThatThrownBy(() -> service.confirmOrder(COMPANY, order.id()))
                 .isInstanceOf(InsufficientStockException.class);
 
         verify(paymentPort, never()).charge(any(), any());
@@ -166,9 +182,9 @@ class OrderApplicationServiceTest {
     void confirmOrderFromWrongStateIsRejectedBeforeExternalCalls() {
         Order order = createdOrder();
         order.confirm();
-        when(orderRepository.findById(order.id())).thenReturn(Optional.of(order));
+        when(orderRepository.findById(COMPANY, order.id())).thenReturn(Optional.of(order));
 
-        assertThatThrownBy(() -> service.confirmOrder(order.id()))
+        assertThatThrownBy(() -> service.confirmOrder(COMPANY, order.id()))
                 .isInstanceOf(InvalidOrderTransitionException.class);
 
         verify(inventoryPort, never()).reserve(any(), anyInt());
@@ -179,9 +195,9 @@ class OrderApplicationServiceTest {
     void shipOrderTransitionsToShipped() {
         Order order = createdOrder();
         order.confirm();
-        when(orderRepository.findById(order.id())).thenReturn(Optional.of(order));
+        when(orderRepository.findById(COMPANY, order.id())).thenReturn(Optional.of(order));
 
-        service.shipOrder(order.id());
+        service.shipOrder(COMPANY, order.id());
 
         assertThat(order.status()).isEqualTo(OrderStatus.SHIPPED);
         verify(orderRepository).save(order);
@@ -190,9 +206,9 @@ class OrderApplicationServiceTest {
     @Test
     void cancelOrderTransitionsToCancelledWithReason() {
         Order order = createdOrder();
-        when(orderRepository.findById(order.id())).thenReturn(Optional.of(order));
+        when(orderRepository.findById(COMPANY, order.id())).thenReturn(Optional.of(order));
 
-        service.cancelOrder(new CancelOrderCommand(order.id(), "changed my mind"));
+        service.cancelOrder(COMPANY, new CancelOrderCommand(order.id(), "changed my mind"));
 
         assertThat(order.status()).isEqualTo(OrderStatus.CANCELLED);
         verify(orderRepository).save(order);
@@ -201,9 +217,9 @@ class OrderApplicationServiceTest {
     @Test
     void getOrderReturnsQueryResult() {
         Order order = createdOrder();
-        when(orderRepository.findById(order.id())).thenReturn(Optional.of(order));
+        when(orderRepository.findById(COMPANY, order.id())).thenReturn(Optional.of(order));
 
-        OrderQueryResult result = service.getOrder(order.id());
+        OrderQueryResult result = service.getOrder(COMPANY, order.id());
 
         assertThat(result.id()).isEqualTo(order.id());
         assertThat(result.status()).isEqualTo(OrderStatus.CREATED);
@@ -213,14 +229,24 @@ class OrderApplicationServiceTest {
     @Test
     void getOrderThatDoesNotExistThrows() {
         OrderId unknown = OrderId.newId();
-        when(orderRepository.findById(unknown)).thenReturn(Optional.empty());
+        when(orderRepository.findById(COMPANY, unknown)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getOrder(unknown))
+        assertThatThrownBy(() -> service.getOrder(COMPANY, unknown))
+                .isInstanceOf(OrderNotFoundException.class);
+    }
+
+    @Test
+    void getOrderFromAnotherCompanyThrowsNotFound() {
+        Order order = createdOrder();
+        when(orderRepository.findById(OTHER_COMPANY, order.id())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getOrder(OTHER_COMPANY, order.id()))
                 .isInstanceOf(OrderNotFoundException.class);
     }
 
     private CreateOrderCommand validCreateCommand() {
         return new CreateOrderCommand(
+                COMPANY,
                 CUSTOMER,
                 ADDRESS,
                 List.of(new CreateOrderCommand.OrderLineCommand(PRODUCT, 2)),
@@ -228,13 +254,13 @@ class OrderApplicationServiceTest {
     }
 
     private CatalogProduct activeCatalogProduct() {
-        return new CatalogProduct(PRODUCT, "Notebook",
+        return new CatalogProduct(COMPANY, PRODUCT, "Notebook",
                 new Money(new BigDecimal("1500.00"), USD), CatalogProductStatus.ACTIVE, Instant.now());
     }
 
     private Order createdOrder() {
         OrderLine line = new OrderLine(PRODUCT, "Notebook", 2, new Money(new BigDecimal("1500.00"), USD));
-        Order order = Order.create(OrderId.newId(), CUSTOMER, List.of(line), ADDRESS, PaymentMethod.CREDIT_CARD);
+        Order order = Order.create(OrderId.newId(), CUSTOMER, List.of(line), ADDRESS, PaymentMethod.CREDIT_CARD, COMPANY);
         order.pullDomainEvents();
         return order;
     }

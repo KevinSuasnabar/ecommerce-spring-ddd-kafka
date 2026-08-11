@@ -3,6 +3,7 @@ package com.ecommerce.order.infrastructure.adapter.in.kafka;
 import com.ecommerce.order.application.dto.CatalogProduct;
 import com.ecommerce.order.application.port.out.CatalogProductStore;
 import com.ecommerce.order.domain.model.CatalogProductStatus;
+import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.Money;
 import com.ecommerce.order.domain.model.ProductId;
 import org.slf4j.Logger;
@@ -28,12 +29,14 @@ public class CatalogEventConsumer {
     @KafkaListener(topics = CATALOG_PRODUCTS_TOPIC)
     public void onCatalogProductEvent(CatalogProductEvent event) {
         CatalogProduct product = new CatalogProduct(
+                new CompanyId(event.companyId()),
                 new ProductId(event.productId()),
                 event.productName(),
                 new Money(event.price(), Currency.getInstance(event.currency())),
                 CatalogProductStatus.from(event.status()),
                 event.occurredAt());
         store.upsert(product);
-        log.info("Upserted product snapshot {} ({}) from event {}", product.productId(), product.productName(), event.eventType());
+        log.info("Upserted product snapshot {} for company {} ({}) from event {}",
+                product.productId(), product.companyId(), product.productName(), event.eventType());
     }
 }

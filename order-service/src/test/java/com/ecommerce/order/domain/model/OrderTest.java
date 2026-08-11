@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class OrderTest {
 
     private static final Currency USD = Currency.getInstance("USD");
+    private static final CompanyId COMPANY = new CompanyId(UUID.fromString("80000000-0000-0000-0000-000000000001"));
     private static final CustomerId CUSTOMER = new CustomerId(UUID.fromString("90000000-0000-0000-0000-000000000001"));
     private static final Address ADDRESS = new Address("Av. Siempre Viva 123", "Springfield", null, "AR", "1406");
     private static final ProductId PRODUCT = new ProductId(UUID.fromString("10000000-0000-0000-0000-000000000001"));
@@ -33,27 +34,36 @@ class OrderTest {
 
     @BeforeEach
     void setUp() {
-        order = Order.create(OrderId.newId(), CUSTOMER, List.of(LINE, SECOND_LINE), ADDRESS, PaymentMethod.CREDIT_CARD);
+        order = Order.create(OrderId.newId(), CUSTOMER, List.of(LINE, SECOND_LINE), ADDRESS, PaymentMethod.CREDIT_CARD, COMPANY);
     }
 
     @Test
     void createBuildsOrderInCreatedStateWithComputedTotal() {
         assertThat(order.status()).isEqualTo(OrderStatus.CREATED);
         assertThat(order.customerId()).isEqualTo(CUSTOMER);
+        assertThat(order.companyId()).isEqualTo(COMPANY);
         assertThat(order.total().amount()).isEqualByComparingTo("3050.00");
         assertThat(order.total().currency()).isEqualTo(USD);
     }
 
     @Test
-    void createEmitsCreatedEvent() {
+    void createEmitsCreatedEventWithCompanyId() {
         assertThat(order.pullDomainEvents())
                 .hasSize(1)
-                .allMatch(event -> event instanceof OrderCreatedEvent);
+                .allMatch(event -> event instanceof OrderCreatedEvent created
+                        && COMPANY.equals(created.companyId()));
+    }
+
+    @Test
+    void createRejectsNullCompanyId() {
+        assertThatThrownBy(() -> Order.create(OrderId.newId(), CUSTOMER, List.of(LINE), ADDRESS, PaymentMethod.CREDIT_CARD, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("companyId must not be null");
     }
 
     @Test
     void createWithNoLinesIsRejected() {
-        assertThatThrownBy(() -> Order.create(OrderId.newId(), CUSTOMER, List.of(), ADDRESS, PaymentMethod.CREDIT_CARD))
+        assertThatThrownBy(() -> Order.create(OrderId.newId(), CUSTOMER, List.of(), ADDRESS, PaymentMethod.CREDIT_CARD, COMPANY))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("at least one line");
     }

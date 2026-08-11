@@ -28,10 +28,10 @@ en la capa transversal con los 3 micros existentes.
 | Micro | Estado | Tests |
 |---|---|---|
 | `catalog-service` | Completo + **tenancy por `CompanyId`** | 56 unit + 3 ITs Kafka (incl. prueba de contrato) |
-| `order-service` | Completo v1 (snapshot read model), **sin `companyId`** | 47 unit + 4 ITs |
+| `order-service` | Completo v1 + **tenancy por `CompanyId`** (snapshot y órdenes escopados por tenant) | 61 unit + 5 ITs Kafka |
 | `warehouse-service` | **Esqueleto**: solo `Application` + yml (ya configurado como consumidor de `catalog.products`) | 0 |
 
-**Total: 114 tests en verde.** `./mvnw verify` completo del monorepo pasa.
+**Total: 125 tests en verde** (catalog 59, order 66). `./mvnw verify` completo del monorepo pasa.
 
 ## Contratos vigentes (no romper sin actualizar esto)
 
@@ -43,20 +43,22 @@ en la capa transversal con los 3 micros existentes.
   (mapper con `WRITE_DATES_AS_TIMESTAMPS` desactivado) — el default de Spring Boot
   serializa `Instant` como epoch en notación científica y rompía el contrato.
 - Campos del payload: `eventType, productId, productName, price, currency, status,
-  occurredAt, companyId`. Los consumidores toleran campos extra que no conocen.
+  occurredAt, companyId`. Los consumidores toleran campos extra que no conocen
+  (order ya consume `companyId` para escopar su snapshot; la key sigue siendo la
+  fuente de verdad del tenant).
 
 ## Roadmap
 
-### Paso 1 — Tenancy en `order-service` (TDD)  ⏳ siguiente
-El evento YA trae `companyId` (la key lo garantiza), pero order lo ignora: el
-snapshot y las órdenes son ciegos al tenant. Transferir el patrón `CompanyContext`
+### Paso 1 — Tenancy en `order-service` (TDD)  ✅ completado
+El evento YA trae `companyId` (la key lo garantiza), pero order lo ignoraba: el
+snapshot y las órdenes eran ciegos al tenant. Se transfirió el patrón `CompanyContext`
 (seam ya probado en catalog) a un segundo micro.
-- `CompanyId` como value object en el dominio de order
-- Snapshot (`CatalogProductStore`) escopado por company
-- `Order` gana `CompanyId`; `OrderRepository` escopado
-- `CompanyContext` en el adapter web (mismo seam que catalog)
+- `CompanyId` value object en el dominio de order (misma forma que catalog)
+- Snapshot (`CatalogProductStore`) escopado por company (composite key igual que catalog)
+- `Order` ganó `CompanyId`; `OrderRepository` escopado; los eventos de dominio lo llevan
+- `CompanyContext` en el adapter web (mismo seam que catalog, mismo UUID hardcodeado)
 
-### Paso 2 — `warehouse-service` desde cero
+### Paso 2 — `warehouse-service` desde cero  ⏳ siguiente
 Primer micro **construido por el estudiante** usando `scripts/create-micro.sh`.
 Dominio de stock + consumidor de `catalog.products` (segundo read model). Yo guío,
 el estudiante escribe.

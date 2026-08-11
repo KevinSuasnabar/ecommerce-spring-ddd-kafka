@@ -1,9 +1,11 @@
 package com.ecommerce.order.infrastructure.adapter.in.web;
 
+import com.ecommerce.order.application.dto.CreateOrderCommand;
 import com.ecommerce.order.application.dto.OrderQueryResult;
 import com.ecommerce.order.application.service.OrderApplicationService;
 import com.ecommerce.order.domain.exception.OrderNotFoundException;
 import com.ecommerce.order.domain.model.Address;
+import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.CustomerId;
 import com.ecommerce.order.domain.model.Money;
 import com.ecommerce.order.domain.model.Order;
@@ -13,7 +15,9 @@ import com.ecommerce.order.domain.model.OrderStatus;
 import com.ecommerce.order.domain.model.PaymentMethod;
 import com.ecommerce.order.domain.model.ProductId;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -26,8 +30,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -39,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OrderControllerTest {
 
     private static final Currency USD = Currency.getInstance("USD");
+    private static final CompanyId COMPANY_ID = new CompanyId(UUID.fromString("90000000-0000-0000-0000-000000000001"));
     private static final OrderId ORDER_ID = OrderId.newId();
 
     @Autowired
@@ -50,6 +57,14 @@ class OrderControllerTest {
     @MockitoBean
     private OrderApplicationService orderApplicationService;
 
+    @MockitoBean
+    private CompanyContext companyContext;
+
+    @BeforeEach
+    void setUp() {
+        when(companyContext.currentCompanyId()).thenReturn(COMPANY_ID);
+    }
+
     @Test
     void createOrderReturns201WithLocationAndBody() throws Exception {
         when(orderApplicationService.createOrder(any())).thenReturn(ORDER_ID);
@@ -60,6 +75,20 @@ class OrderControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/orders/" + ORDER_ID.value()))
                 .andExpect(jsonPath("$.orderId").value(ORDER_ID.value().toString()));
+    }
+
+    @Test
+    void createOrderCarriesCompanyIdFromContext() throws Exception {
+        when(orderApplicationService.createOrder(any())).thenReturn(ORDER_ID);
+
+        mockMvc.perform(post("/api/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validCreatePayload()))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateOrderCommand> captor = ArgumentCaptor.forClass(CreateOrderCommand.class);
+        verify(orderApplicationService).createOrder(captor.capture());
+        assertThat(captor.getValue().companyId()).isEqualTo(COMPANY_ID);
     }
 
     @Test
@@ -79,7 +108,8 @@ class OrderControllerTest {
 
     @Test
     void getExistingOrderReturns200() throws Exception {
-        when(orderApplicationService.getOrder(any())).thenReturn(queryResult(OrderStatus.CREATED));
+        when(orderApplicationService.getOrder(any(CompanyId.class), any(OrderId.class)))
+                .thenReturn(queryResult(OrderStatus.CREATED));
 
         mockMvc.perform(get("/api/orders/" + ORDER_ID.value()))
                 .andExpect(status().isOk())
@@ -90,11 +120,25 @@ class OrderControllerTest {
 
     @Test
     void getMissingOrderReturns404() throws Exception {
-        when(orderApplicationService.getOrder(any())).thenThrow(new OrderNotFoundException(ORDER_ID));
+        when(orderApplicationService.getOrder(any(CompanyId.class), any(OrderId.class)))
+                .thenThrow(new OrderNotFoundException(ORDER_ID));
 
         mockMvc.perform(get("/api/orders/" + ORDER_ID.value()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    @Test
+    void getOrderCarriesCompanyIdFromContext() throws Exception {
+        when(orderApplicationService.getOrder(any(CompanyId.class), any(OrderId.class)))
+                .thenReturn(queryResult(OrderStatus.CREATED));
+
+        mockMvc.perform(get("/api/orders/" + ORDER_ID.value()))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<CompanyId> captor = ArgumentCaptor.forClass(CompanyId.class);
+        verify(orderApplicationService).getOrder(captor.capture(), any(OrderId.class));
+        assertThat(captor.getValue()).isEqualTo(COMPANY_ID);
     }
 
     @Test
@@ -139,7 +183,8 @@ class OrderControllerTest {
                 new CustomerId(UUID.fromString("90000000-0000-0000-0000-000000000001")),
                 List.of(line),
                 new Address("Av. Siempre Viva 123", "Springfield", null, "AR", "1406"),
-                PaymentMethod.CREDIT_CARD);
+                PaymentMethod.CREDIT_CARD,
+                COMPANY_ID);
         if (status == OrderStatus.CONFIRMED) {
             order.confirm();
         }
