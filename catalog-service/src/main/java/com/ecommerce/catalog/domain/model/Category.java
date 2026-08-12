@@ -30,6 +30,14 @@ public final class Category {
         return new Category(id, companyId, name, parentId, now, now);
     }
 
+    public static Category reconstitute(CategoryId id, CompanyId companyId, String name,
+                                        CategoryId parentId, Instant createdAt, Instant updatedAt) {
+        Objects.requireNonNull(id, "id must not be null");
+        Objects.requireNonNull(companyId, "company id must not be null");
+        requireNonBlank(name, "name");
+        return new Category(id, companyId, name, parentId, createdAt, updatedAt);
+    }
+
     public void rename(String name) {
         requireNonBlank(name, "name");
         this.name = name;

@@ -13,11 +13,14 @@ import com.ecommerce.catalog.domain.model.ProductId;
 import com.ecommerce.catalog.domain.model.ProductStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.UUID;
 
+@Profile("!postgres")
 @Component
 public class KafkaEventPublisher implements EventPublisher {
 
@@ -61,6 +64,7 @@ public class KafkaEventPublisher implements EventPublisher {
                                         Money price, ProductStatus status, Instant occurredAt, CompanyId companyId) {
         return new ProductEventMessage(
                 eventType,
+                UUID.randomUUID(),
                 productId.value(),
                 productName,
                 price.amount(),

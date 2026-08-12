@@ -2,6 +2,7 @@ package com.ecommerce.order.infrastructure.adapter.in.kafka;
 
 import com.ecommerce.order.application.dto.CatalogProduct;
 import com.ecommerce.order.application.port.out.CatalogProductStore;
+import com.ecommerce.order.application.port.out.processedevent.ProcessedEventStore;
 import com.ecommerce.order.domain.model.CatalogProductStatus;
 import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.Money;
@@ -21,13 +22,20 @@ public class CatalogEventConsumer {
     private static final Logger log = LoggerFactory.getLogger(CatalogEventConsumer.class);
 
     private final CatalogProductStore store;
+    private final ProcessedEventStore processedEventStore;
 
-    public CatalogEventConsumer(CatalogProductStore store) {
+    public CatalogEventConsumer(CatalogProductStore store, ProcessedEventStore processedEventStore) {
         this.store = store;
+        this.processedEventStore = processedEventStore;
     }
 
     @KafkaListener(topics = CATALOG_PRODUCTS_TOPIC)
     public void onCatalogProductEvent(CatalogProductEvent event) {
+        if (processedEventStore.isProcessed(event.eventId())) {
+            log.info("Skipping duplicate catalog event {} (eventId={})", event.eventType(), event.eventId());
+            return;
+        }
+
         CatalogProduct product = new CatalogProduct(
                 new CompanyId(event.companyId()),
                 new ProductId(event.productId()),
@@ -36,7 +44,8 @@ public class CatalogEventConsumer {
                 CatalogProductStatus.from(event.status()),
                 event.occurredAt());
         store.upsert(product);
-        log.info("Upserted product snapshot {} for company {} ({}) from event {}",
-                product.productId(), product.companyId(), product.productName(), event.eventType());
+        processedEventStore.markProcessed(event.eventId());
+        log.info("Upserted product snapshot {} for company {} ({}) from event {} (eventId={})",
+                product.productId(), product.companyId(), product.productName(), event.eventType(), event.eventId());
     }
 }

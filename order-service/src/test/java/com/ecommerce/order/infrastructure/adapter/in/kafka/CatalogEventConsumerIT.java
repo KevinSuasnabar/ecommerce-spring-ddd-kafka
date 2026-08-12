@@ -2,6 +2,7 @@ package com.ecommerce.order.infrastructure.adapter.in.kafka;
 
 import com.ecommerce.order.application.dto.CatalogProduct;
 import com.ecommerce.order.application.port.out.CatalogProductStore;
+import com.ecommerce.order.application.port.out.processedevent.ProcessedEventStore;
 import com.ecommerce.order.domain.model.CatalogProductStatus;
 import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.Money;
@@ -52,6 +53,9 @@ class CatalogEventConsumerIT {
 
     @Autowired
     private CatalogProductStore store;
+
+    @Autowired
+    private ProcessedEventStore processedEventStore;
 
     @Test
     void consumesCatalogProductEventAndUpsertsSnapshot() {
@@ -128,14 +132,38 @@ class CatalogEventConsumerIT {
         assertThat(store.findById(COMPANY, new ProductId(otherProductId))).isEmpty();
     }
 
+    @Test
+    void duplicateEventWithSameEventIdIsSkipped() {
+        UUID eventId = UUID.fromString("50000000-0000-0000-0000-000000000001");
+        UUID dupProductId = UUID.fromString("30000000-0000-0000-0000-000000000010");
+        String event = productEvent("PRODUCT_CREATED", "Mouse Gamer", "25.00", "ACTIVE",
+                COMPANY, dupProductId, eventId);
+
+        kafkaTemplate.send(CatalogEventConsumer.CATALOG_PRODUCTS_TOPIC, event);
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                assertThat(processedEventStore.isProcessed(eventId)).isTrue());
+
+        kafkaTemplate.send(CatalogEventConsumer.CATALOG_PRODUCTS_TOPIC, event);
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            assertThat(processedEventStore.isProcessed(eventId)).isTrue();
+            assertThat(store.findById(COMPANY, new ProductId(dupProductId))).isPresent();
+        });
+    }
+
     private String productEvent(String eventType, String name, String price, String status, CompanyId companyId) {
         return productEvent(eventType, name, price, status, companyId, PRODUCT_ID);
     }
 
     private String productEvent(String eventType, String name, String price, String status, CompanyId companyId, UUID productId) {
+        return productEvent(eventType, name, price, status, companyId, productId, UUID.randomUUID());
+    }
+
+    private String productEvent(String eventType, String name, String price, String status,
+                                CompanyId companyId, UUID productId, UUID eventId) {
         return """
                 {
                   "eventType": "%s",
+                  "eventId": "%s",
                   "productId": "%s",
                   "productName": "%s",
                   "price": %s,
@@ -144,6 +172,6 @@ class CatalogEventConsumerIT {
                   "occurredAt": "2026-08-04T12:00:00Z",
                   "companyId": "%s"
                 }
-                """.formatted(eventType, productId, name, price, status, companyId.value());
+                """.formatted(eventType, eventId, productId, name, price, status, companyId.value());
     }
 }

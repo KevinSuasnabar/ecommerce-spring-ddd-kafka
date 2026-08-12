@@ -4,12 +4,14 @@ import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.Order;
 import com.ecommerce.order.domain.model.OrderId;
 import com.ecommerce.order.domain.repository.OrderRepository;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+@Profile("!postgres")
 @Repository
 public class InMemoryOrderRepository implements OrderRepository {
 

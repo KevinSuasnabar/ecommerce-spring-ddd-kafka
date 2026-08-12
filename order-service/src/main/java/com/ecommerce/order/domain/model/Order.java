@@ -71,6 +71,22 @@ public final class Order {
         return order;
     }
 
+    public static Order reconstitute(OrderId id, CustomerId customerId, List<OrderLine> lines,
+                                     Address shippingAddress, PaymentMethod paymentMethod,
+                                     OrderStatus status, CompanyId companyId,
+                                     Instant createdAt, Instant updatedAt) {
+        Objects.requireNonNull(id, "id must not be null");
+        Objects.requireNonNull(customerId, "customerId must not be null");
+        if (lines.isEmpty()) {
+            throw new IllegalArgumentException("an order must have at least one line");
+        }
+        Objects.requireNonNull(shippingAddress, "shippingAddress must not be null");
+        Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
+        Objects.requireNonNull(status, "status must not be null");
+        Objects.requireNonNull(companyId, "companyId must not be null");
+        return new Order(id, customerId, lines, shippingAddress, paymentMethod, status, companyId, createdAt, updatedAt);
+    }
+
     public void confirm() {
         transitionTo(OrderStatus.CONFIRMED);
         recordEvent(new OrderConfirmedEvent(id, companyId, updatedAt));

@@ -7,6 +7,9 @@ Proyecto de **aprendizaje**: ecommerce event-driven con Hexagonal + DDD (Spring 
 
 1. Leé **`PLAN.md`** — roadmap vigente, estado de cada micro y contratos.
 2. El **siguiente paso del roadmap** está marcado ahí; no inventes otro alcance.
+3. Al **cerrar un paso o hito** (verificación en verde), actualizá `PLAN.md`:
+   estado de micros, contadores de tests, roadmap marcado y deuda técnica pagada.
+   Es un requisito del cierre, no un extra.
 
 ## Invariants (no violar)
 

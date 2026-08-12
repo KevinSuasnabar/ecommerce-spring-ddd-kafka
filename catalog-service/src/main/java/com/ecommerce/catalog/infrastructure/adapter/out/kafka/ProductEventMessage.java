@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record ProductEventMessage(
         String eventType,
+        UUID eventId,
         UUID productId,
         String productName,
         BigDecimal price,

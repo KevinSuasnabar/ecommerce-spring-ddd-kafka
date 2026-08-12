@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/hexagonal_micro
+    username: ${DB_USER:postgres}
+    password: ${DB_PASS:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: catalog
+    open-in-view: false
+  flyway:
+    enabled: true
+    schemas: catalog
+    default-schema: catalog
+    locations: classpath:db/migration/catalog
+  kafka:
+    producer:
+      acks: all

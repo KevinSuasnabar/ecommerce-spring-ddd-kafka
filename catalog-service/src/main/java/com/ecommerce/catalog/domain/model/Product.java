@@ -58,6 +58,20 @@ public final class Product {
         return product;
     }
 
+    public static Product reconstitute(ProductId id, String name, String description,
+                                       Money price, CompanyId companyId, ProductStatus status,
+                                       Set<CategoryId> categoryIds, Instant createdAt, Instant updatedAt) {
+        Objects.requireNonNull(id, "id must not be null");
+        requireNonBlank(name, "name");
+        Objects.requireNonNull(price, "price must not be null");
+        Objects.requireNonNull(companyId, "CompanyId must not be null");
+        Objects.requireNonNull(status, "status must not be null");
+        Objects.requireNonNull(categoryIds, "categoryIds must not be null");
+        Product product = new Product(id, name, description, price, status, companyId, createdAt, updatedAt);
+        product.categories.addAll(categoryIds);
+        return product;
+    }
+
     public void update(String name, String description) {
         requireNonBlank(name, "name");
         if (status == ProductStatus.RETIRED) {

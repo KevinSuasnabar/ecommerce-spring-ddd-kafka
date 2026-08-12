@@ -4,6 +4,7 @@ import com.ecommerce.order.application.dto.CatalogProduct;
 import com.ecommerce.order.application.port.out.CatalogProductStore;
 import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.ProductId;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+@Profile("!postgres")
 @Component
 public class InMemoryCatalogProductStore implements CatalogProductStore {
 

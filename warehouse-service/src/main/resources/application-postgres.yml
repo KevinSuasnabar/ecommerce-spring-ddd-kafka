@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/hexagonal_micro
+    username: ${DB_USER:postgres}
+    password: ${DB_PASS:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: warehouse
+    open-in-view: false
+  flyway:
+    enabled: true
+    schemas: warehouse
+    default-schema: warehouse
+    locations: classpath:db/migration/warehouse

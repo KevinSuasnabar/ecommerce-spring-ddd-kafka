@@ -52,7 +52,7 @@ class CatalogProductContractIT {
      * El contrato: campos que order-service (CatalogProductEvent) espera recibir.
      */
     static final List<String> ORDER_CONTRACT_FIELDS = List.of(
-            "eventType", "productId", "productName", "price", "currency", "status", "occurredAt");
+            "eventType", "eventId", "productId", "productName", "price", "currency", "status", "occurredAt", "companyId");
 
     @Container
     @ServiceConnection
