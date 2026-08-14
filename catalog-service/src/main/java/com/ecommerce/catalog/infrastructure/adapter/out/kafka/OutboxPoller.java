@@ -5,7 +5,6 @@ import com.ecommerce.catalog.infrastructure.adapter.out.persistence.jpa.OutboxEv
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Profile;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -15,7 +14,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Component
-@Profile("postgres")
 public class OutboxPoller {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxPoller.class);
@@ -45,7 +43,7 @@ public class OutboxPoller {
             try {
                 ProductEventMessage message = objectMapper.readValue(entity.getPayload(), ProductEventMessage.class);
                 String key = message.companyId() + ":" + message.productId();
-                kafkaTemplate.send(KafkaEventPublisher.PRODUCT_EVENTS_TOPIC, key, message)
+                kafkaTemplate.send(ProductEventMessage.PRODUCT_EVENTS_TOPIC, key, message)
                         .get(5, TimeUnit.SECONDS);
                 entity.markPublished();
                 outboxEventRepository.save(entity);

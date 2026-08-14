@@ -1,14 +1,12 @@
 package com.ecommerce.order.infrastructure.adapter.out.persistence.jpa;
 
 import com.ecommerce.order.application.port.out.processedevent.ProcessedEventStore;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Component
-@Profile("postgres")
 public class JpaProcessedEventStoreAdapter implements ProcessedEventStore {
 
     private final JpaProcessedEventRepository jpa;

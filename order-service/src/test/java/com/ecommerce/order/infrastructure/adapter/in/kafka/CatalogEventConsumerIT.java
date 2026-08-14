@@ -1,5 +1,6 @@
 package com.ecommerce.order.infrastructure.adapter.in.kafka;
 
+import com.ecommerce.order.AbstractPostgresIT;
 import com.ecommerce.order.application.dto.CatalogProduct;
 import com.ecommerce.order.application.port.out.CatalogProductStore;
 import com.ecommerce.order.application.port.out.processedevent.ProcessedEventStore;
@@ -37,7 +38,7 @@ import static org.awaitility.Awaitility.await;
         "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer",
         "spring.kafka.producer.value-serializer=org.apache.kafka.common.serialization.StringSerializer"
 })
-class CatalogEventConsumerIT {
+class CatalogEventConsumerIT extends AbstractPostgresIT {
 
     private static final UUID PRODUCT_ID = UUID.fromString("30000000-0000-0000-0000-000000000001");
     private static final CompanyId COMPANY = new CompanyId(UUID.fromString("90000000-0000-0000-0000-000000000001"));

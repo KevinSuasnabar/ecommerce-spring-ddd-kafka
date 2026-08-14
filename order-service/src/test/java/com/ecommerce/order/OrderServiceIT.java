@@ -18,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -33,7 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = "spring.kafka.listener.auto-startup=false")
 @AutoConfigureMockMvc
-class OrderServiceIntegrationTest {
+@Transactional
+class OrderServiceIT extends AbstractPostgresIT {
 
     private static final Currency USD = Currency.getInstance("USD");
     private static final CompanyId COMPANY = new CompanyId(java.util.UUID.fromString("90000000-0000-0000-0000-000000000001"));

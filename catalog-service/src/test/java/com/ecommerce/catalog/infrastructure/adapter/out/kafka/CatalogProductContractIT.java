@@ -1,10 +1,11 @@
 package com.ecommerce.catalog.infrastructure.adapter.out.kafka;
 
-import com.ecommerce.catalog.domain.event.ProductCreatedEvent;
+import com.ecommerce.catalog.AbstractPostgresIT;
 import com.ecommerce.catalog.domain.model.CompanyId;
 import com.ecommerce.catalog.domain.model.Money;
+import com.ecommerce.catalog.domain.model.Product;
 import com.ecommerce.catalog.domain.model.ProductId;
-import com.ecommerce.catalog.domain.model.ProductStatus;
+import com.ecommerce.catalog.domain.repository.ProductRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -41,12 +42,13 @@ import static org.awaitility.Awaitility.await;
  */
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(properties = {
+        "spring.task.scheduling.enabled=false",
         "spring.kafka.consumer.group-id=catalog-contract-it",
         "spring.kafka.consumer.auto-offset-reset=earliest",
         "spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer",
         "spring.kafka.consumer.value-deserializer=org.apache.kafka.common.serialization.StringDeserializer"
 })
-class CatalogProductContractIT {
+class CatalogProductContractIT extends AbstractPostgresIT {
 
     /**
      * El contrato: campos que order-service (CatalogProductEvent) espera recibir.
@@ -61,12 +63,15 @@ class CatalogProductContractIT {
     private static final CopyOnWriteArrayList<RawMessage> rawMessages = new CopyOnWriteArrayList<>();
 
     @Autowired
-    private KafkaEventPublisher publisher;
+    private ProductRepository productRepository;
+
+    @Autowired
+    private OutboxPoller outboxPoller;
 
     @Autowired
     private ObjectMapper objectMapper;
 
-    @KafkaListener(topics = KafkaEventPublisher.PRODUCT_EVENTS_TOPIC, groupId = "catalog-contract-consumer")
+    @KafkaListener(topics = ProductEventMessage.PRODUCT_EVENTS_TOPIC, groupId = "catalog-contract-consumer")
     void onRawMessage(ConsumerRecord<String, String> record) {
         rawMessages.add(new RawMessage(record.key(), record.value()));
     }
@@ -75,10 +80,11 @@ class CatalogProductContractIT {
     void publishedJsonMatchesOrderContract() throws Exception {
         CompanyId companyId = new CompanyId(UUID.fromString("90000000-0000-0000-0000-000000000001"));
         Money price = new Money(new BigDecimal("1500.00"), Currency.getInstance("USD"));
-
         ProductId productId = ProductId.newId();
 
-        publisher.publish(new ProductCreatedEvent(companyId, productId, "Notebook", price, ProductStatus.DRAFT, Instant.now()));
+        Product product = Product.create(productId, "Notebook", null, price, companyId);
+        productRepository.save(product);
+        outboxPoller.pollAndPublish();
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> assertThat(rawMessages).hasSize(1));
 

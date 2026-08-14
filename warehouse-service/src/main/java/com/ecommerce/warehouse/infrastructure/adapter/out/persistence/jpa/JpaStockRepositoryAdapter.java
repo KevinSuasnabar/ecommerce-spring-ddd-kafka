@@ -7,7 +7,6 @@ import com.ecommerce.warehouse.domain.model.StockId;
 import com.ecommerce.warehouse.domain.model.StockMovement;
 import com.ecommerce.warehouse.domain.model.StockMovementType;
 import com.ecommerce.warehouse.domain.repository.StockRepository;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,7 +16,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Component
-@Profile("postgres")
 public class JpaStockRepositoryAdapter implements StockRepository {
 
     private final JpaStockRepository stockJpa;

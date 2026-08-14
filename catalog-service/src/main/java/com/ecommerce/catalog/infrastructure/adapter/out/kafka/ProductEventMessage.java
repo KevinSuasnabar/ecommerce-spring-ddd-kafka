@@ -14,4 +14,6 @@ public record ProductEventMessage(
         String status,
         Instant occurredAt,
         UUID companyId) {
+
+    public static final String PRODUCT_EVENTS_TOPIC = "catalog.products";
 }

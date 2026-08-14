@@ -27,11 +27,11 @@ en la capa transversal con los 3 micros existentes.
 
 | Micro | Estado | Tests |
 |---|---|---|
-| `catalog-service` | Completo + **tenancy por `CompanyId`** + **Outbox** (sync send con `acks=all` + poller) | 56 unit + 3 ITs Kafka (incl. prueba de contrato) |
-| `order-service` | Completo v1 + **tenancy por `CompanyId`** (snapshot y órdenes escopados por tenant) + **idempotencia** (dedupe por `eventId`) | 69 unit + 6 ITs Kafka |
-| `warehouse-service` | Completo v1: dominio de stock con ledger (Variante B) + `stock_level` (saldo O(1)) + write-path O(1) (`Stock.fromSnapshot`) + consumidor de `catalog.products` + idempotencia + tenancy por `CompanyId` | 53 unit + 3 ITs Kafka |
+| `catalog-service` | Completo + **tenancy por `CompanyId`** + **Outbox** (sync send con `acks=all` + poller). **Postgres es el único camino** (sin perfiles, sin repos `InMemory`) | 53 unit + 6 IT (Postgres/Kafka Testcontainers, incl. prueba de contrato) |
+| `order-service` | Completo v1 + **tenancy por `CompanyId`** (snapshot y órdenes escopados por tenant) + **idempotencia** (dedupe por `eventId`). Postgres único camino | 47 unit + 13 IT |
+| `warehouse-service` | Completo v1: dominio de stock con ledger (Variante B) + `stock_level` (saldo O(1)) + write-path O(1) (`Stock.fromSnapshot`) + consumidor de `catalog.products` + idempotencia + tenancy por `CompanyId`. Postgres único camino | 47 unit + 5 IT |
 
-**Total: 190 tests en verde** (catalog 59, order 75, warehouse 56). `./mvnw verify` completo del monorepo pasa.
+**171 tests en verde** (catalog 59, order 60, warehouse 52). `./mvnw verify` completo del monorepo pasa (147 unitarios sin Docker + 24 ITs con Testcontainers Postgres/Kafka).
 
 ## Contratos vigentes (no romper sin actualizar esto)
 
@@ -80,16 +80,15 @@ consumidor de `catalog.products` (segundo read model), y tenancy replicada al te
 
 ## Deuda técnica conocida
 
-- **Eliminar `InMemory*`** — las implementaciones en memoria ya no aportan aprendizaje; postgres es el camino. Implica tocar los 3 micros, todos los tests, y posiblemente usar Testcontainers o H2 para los tests que hoy dependen del perfil default.
-- En el perfil default (`!postgres`), `catalog-service` publica eventos sin Outbox (`KafkaEventPublisher` directo).
 - Consumidores sin manejo de "mensajes venenosos" (`ErrorHandlingDeserializer`).
+- Cada `*IT` levanta su propio contenedor Postgres (Testcontainers); si el `verify` se vuelve lento, compartir un único contenedor por módulo.
 
 ## Comandos de verificación
 
 ```bash
-./mvnw verify                 # monorepo completo: unitarios + ITs (requiere Docker)
+./mvnw verify                 # monorepo completo: unitarios + ITs (requiere Docker: Postgres + Kafka vía Testcontainers)
 ./mvnw verify -pl <micro>     # un solo micro
-./mvnw test                   # sin Docker (no corre los *IT)
+./mvnw test                   # sin Docker (unitarios + slices @WebMvcTest; no corre los *IT)
 ```
 
 ## Convenciones
@@ -101,7 +100,6 @@ consumidor de `catalog.products` (segundo read model), y tenancy replicada al te
 
 ## Próxima sesión (por donde arrancar)
 
-1. **¿Eliminar `InMemory*`?** — toca los 3 micros y todos los tests. El usuario quiere que postgres sea el único camino.
-2. **Saga** — patrón Saga para el flujo de compra (el concepto más fuerte que falta).
-3. **API Gateway** — routing, rate limiting, etc.
-4. **CI (GitHub Actions)** + umbral JaCoCo.
+1. **Saga** — patrón Saga para el flujo de compra (el concepto más fuerte que falta).
+2. **API Gateway** — routing, rate limiting, etc.
+3. **CI (GitHub Actions)** + umbral JaCoCo.

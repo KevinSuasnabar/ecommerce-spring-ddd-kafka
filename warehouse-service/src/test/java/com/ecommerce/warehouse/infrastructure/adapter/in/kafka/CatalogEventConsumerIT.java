@@ -5,6 +5,7 @@ import com.ecommerce.warehouse.domain.model.ProductId;
 import com.ecommerce.warehouse.domain.model.StockId;
 import com.ecommerce.warehouse.domain.repository.StockRepository;
 import com.ecommerce.warehouse.application.port.out.processedevent.ProcessedEventStore;
+import com.ecommerce.warehouse.AbstractPostgresIT;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,7 +32,7 @@ import static org.awaitility.Awaitility.await;
         "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer",
         "spring.kafka.producer.value-serializer=org.apache.kafka.common.serialization.StringSerializer"
 })
-class CatalogEventConsumerIT {
+class CatalogEventConsumerIT extends AbstractPostgresIT {
 
     private static final UUID PRODUCT_ID = UUID.fromString("40000000-0000-0000-0000-000000000001");
     private static final CompanyId COMPANY = new CompanyId(UUID.fromString("90000000-0000-0000-0000-000000000001"));

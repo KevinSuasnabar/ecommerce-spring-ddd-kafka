@@ -15,7 +15,6 @@ import com.ecommerce.catalog.domain.repository.ProductRepository;
 import com.ecommerce.catalog.infrastructure.adapter.out.kafka.ProductEventMessage;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +26,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
-@Profile("postgres")
 public class JpaProductRepositoryAdapter implements ProductRepository {
 
     private final JpaProductRepository jpa;

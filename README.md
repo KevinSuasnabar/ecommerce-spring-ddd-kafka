@@ -11,7 +11,7 @@ entendiendo el *porqué* de cada decisión antes que el *cómo*.
 |---|---|---|---|
 | `catalog-service` | 8082 | Fuente de verdad del catálogo. CRUD de productos, search paginado, categorías jerárquicas, máquina de estados DRAFT/ACTIVE/RETIRED. **Publica** eventos al topic `catalog.products` | ✅ |
 | `order-service` | 8081 | Órdenes con ciclo de vida (created → confirmed → shipped → delivered). **Consume** `catalog.products` y mantiene un snapshot para resolver nombre/precio sin llamar a catalog por HTTP | ✅ |
-| `warehouse-service` | 8083 | Stock. Segundo consumidor de `catalog.products` (read model de inventario) | 🚧 esqueleto |
+| `warehouse-service` | 8083 | Stock (ledger + `stock_level`). Segundo consumidor de `catalog.products` (read model de inventario) | ✅ |
 
 > **Endgame**: cerrar en estos 3 micros + capa transversal (Outbox, idempotencia,
 > Saga, API Gateway). Ver [PLAN.md](PLAN.md) — no se agregan más micros.
@@ -45,14 +45,14 @@ como argumento explícito hasta el dominio y los repositorios escopados.
 | Micro | Estado |
 |---|---|
 | `catalog-service` | ✅ productos y categorías escopados por company |
-| `order-service` | ⏳ pendiente (el evento ya trae `companyId`; falta aplicarlo) |
-| `warehouse-service` | ⏳ se construye ya con tenancy |
+| `order-service` | ✅ snapshot y órdenes escopados por company |
+| `warehouse-service` | ✅ stock escopado por company |
 
 ## Stack compartido
 
 - **Spring Boot 3.5.16** / Java 17 (records, `sealed` interfaces)
 - **Kafka** vía `apache/kafka:3.7.0` (KRaft) en Docker Compose
-- **Tests**: JUnit 5, Mockito, AssertJ, Testcontainers (Kafka real en los ITs), awaitility, JaCoCo
+- **Tests**: JUnit 5, Mockito, AssertJ, Testcontainers (Postgres + Kafka real en los ITs), awaitility, JaCoCo
 
 ## Arranque rápido
 
@@ -108,8 +108,8 @@ hexagonal-micro/
 ## Roadmap
 
 El plan completo (estado, contratos, deuda técnica y próximos pasos) vive en
-**[PLAN.md](PLAN.md)**. Resumen: tenancy en order → warehouse desde cero → capa
-transversal (Outbox, idempotencia, Saga, Gateway) → CI.
+**[PLAN.md](PLAN.md)**. Resumen: tenancy en los 3 micros → warehouse desde cero →
+Outbox + idempotencia (✅) → Saga → API Gateway → CI.
 
 ## Detalle de cada micro
 

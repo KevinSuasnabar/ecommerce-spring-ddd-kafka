@@ -2,7 +2,6 @@ package com.ecommerce.warehouse.infrastructure.adapter.out.persistence.jpa;
 
 import com.ecommerce.warehouse.application.port.out.StockLevelStore;
 import com.ecommerce.warehouse.domain.model.StockId;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,7 +9,6 @@ import java.time.Instant;
 import java.util.Optional;
 
 @Component
-@Profile("postgres")
 public class JpaStockLevelStoreAdapter implements StockLevelStore {
 
     private final JpaStockLevelRepository jpa;

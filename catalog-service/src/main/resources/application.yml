@@ -4,11 +4,28 @@ server:
 spring:
   application:
     name: catalog-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/hexagonal_micro
+    username: ${DB_USER:postgres}
+    password: ${DB_PASS:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: catalog
+    open-in-view: false
+  flyway:
+    enabled: true
+    schemas: catalog
+    default-schema: catalog
+    locations: classpath:db/migration/catalog
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: com.ecommerce.catalog.infrastructure.adapter.out.kafka.IsoDateJsonSerializer
+      acks: all
       properties:
         spring.json.add.type.headers: false
 

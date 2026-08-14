@@ -4,7 +4,6 @@ import com.ecommerce.catalog.domain.model.Category;
 import com.ecommerce.catalog.domain.model.CategoryId;
 import com.ecommerce.catalog.domain.model.CompanyId;
 import com.ecommerce.catalog.domain.repository.CategoryRepository;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,7 +11,6 @@ import java.util.List;
 import java.util.Optional;
 
 @Component
-@Profile("postgres")
 public class JpaCategoryRepositoryAdapter implements CategoryRepository {
 
     private final JpaCategoryRepository jpa;
@@ -49,7 +47,7 @@ public class JpaCategoryRepositoryAdapter implements CategoryRepository {
 
     @Override
     public boolean existsByName(CompanyId companyId, String name) {
-        return jpa.existsByCompanyIdAndName(companyId.value(), name);
+        return jpa.existsByCompanyIdAndNameIgnoreCase(companyId.value(), name);
     }
 
     private Category toDomain(CategoryJpaEntity entity) {

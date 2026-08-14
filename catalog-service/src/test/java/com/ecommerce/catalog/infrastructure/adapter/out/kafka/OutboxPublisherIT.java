@@ -1,10 +1,11 @@
 package com.ecommerce.catalog.infrastructure.adapter.out.kafka;
 
-import com.ecommerce.catalog.domain.event.ProductCreatedEvent;
+import com.ecommerce.catalog.AbstractPostgresIT;
 import com.ecommerce.catalog.domain.model.CompanyId;
 import com.ecommerce.catalog.domain.model.Money;
+import com.ecommerce.catalog.domain.model.Product;
 import com.ecommerce.catalog.domain.model.ProductId;
-import com.ecommerce.catalog.domain.model.ProductStatus;
+import com.ecommerce.catalog.domain.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,7 +18,6 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
@@ -28,14 +28,15 @@ import static org.awaitility.Awaitility.await;
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(properties = {
-        "spring.kafka.consumer.group-id=catalog-it",
+        "spring.task.scheduling.enabled=false",
+        "spring.kafka.consumer.group-id=catalog-outbox-it",
         "spring.kafka.consumer.auto-offset-reset=earliest",
         "spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer",
         "spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.JsonDeserializer",
         "spring.kafka.consumer.properties.spring.json.trusted.packages=*",
         "spring.kafka.consumer.properties.spring.json.value.default.type=com.ecommerce.catalog.infrastructure.adapter.out.kafka.ProductEventMessage"
 })
-class KafkaEventPublisherIT {
+class OutboxPublisherIT extends AbstractPostgresIT {
 
     @Container
     @ServiceConnection
@@ -45,9 +46,12 @@ class KafkaEventPublisherIT {
     private static final CompanyId COMPANY_ID = new CompanyId(UUID.fromString("90000000-0000-0000-0000-000000000001"));
 
     @Autowired
-    private KafkaEventPublisher publisher;
+    private ProductRepository productRepository;
 
-    @KafkaListener(topics = KafkaEventPublisher.PRODUCT_EVENTS_TOPIC, groupId = "catalog-it-consumer")
+    @Autowired
+    private OutboxPoller outboxPoller;
+
+    @KafkaListener(topics = ProductEventMessage.PRODUCT_EVENTS_TOPIC, groupId = "catalog-outbox-consumer")
     void onMessage(ProductEventMessage message) {
         received.add(message);
     }
@@ -56,8 +60,10 @@ class KafkaEventPublisherIT {
     void publishesProductCreatedEventWithFullState() {
         ProductId productId = ProductId.newId();
         Money price = new Money(new BigDecimal("1500.00"), Currency.getInstance("USD"));
+        Product product = Product.create(productId, "Notebook", null, price, COMPANY_ID);
 
-        publisher.publish(new ProductCreatedEvent(COMPANY_ID, productId, "Notebook", price, ProductStatus.DRAFT, Instant.now()));
+        productRepository.save(product);
+        outboxPoller.pollAndPublish();
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
             assertThat(received).hasSize(1);

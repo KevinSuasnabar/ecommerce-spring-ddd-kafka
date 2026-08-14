@@ -5,12 +5,12 @@ Ejemplo didáctico de un microservicio Spring Boot (Java 17) con **Arquitectura 
 ## Quick path
 
 ```bash
-./mvnw verify                 # unitarios + integración + ITs con Testcontainers
-./mvnw test                   # solo unitarios + integración web (sin Docker)
+./mvnw verify                 # unitarios + ITs con Testcontainers (Postgres + Kafka, requiere Docker)
+./mvnw test                   # solo unitarios + slices web (sin Docker)
 ./mvnw spring-boot:run        # levanta el servicio en http://localhost:8081
 ```
 
-> Requiere el broker Kafka corriendo (ver el `docker-compose.yml` de la raíz) y
+> Requiere el broker Kafka y Postgres corriendo (ver el `docker-compose.yml` de la raíz) y
 > que `catalog-service` esté publicando productos al topic `catalog.products`.
 
 Probar el flujo completo de una orden:
@@ -49,10 +49,10 @@ catalog-service ──publica──► Kafka (catalog.products) ──consume─
                                 ProductCreatedEvent                     │
                                 ProductPriceChangedEvent                ▼
                                 ProductActivatedEvent        CatalogEventConsumer
-                                ProductRetiredEvent                │
+                                 ProductRetiredEvent                │
                                                                     ▼
-                                                    InMemoryCatalogProductStore
-                                                    (snapshot: id, nombre, precio, status)
+                                               JpaCatalogProductStoreAdapter
+                                               (snapshot: id, nombre, precio, status)
 ```
 
 Cuando creás una orden, `OrderApplicationService` resuelve nombre/precio desde ese
@@ -79,7 +79,7 @@ los eventos viajan asíncronos y el snapshot se actualiza en cuanto llegan.
                      │              INFRAESTRUCTURE             │
                      │  (adapters: lo que cambia)               │
    HTTP ───────────► │  web/OrderController  ← puerto IN        │
-                     │  persistence/InMemory  ← puerto OUT      │
+                     │  persistence/jpa  ← puerto OUT      │
                      │  payment/Fake, inventory/Fake,           │
                      │  notification/Log, event/Spring          │
                      └──────────────┬───────────────────────────┘
@@ -98,7 +98,7 @@ los eventos viajan asíncronos y el snapshot se actualiza en cuanto llegan.
                      └──────────────────────────────────────────┘
 ```
 
-**Regla de oro:** las flechas apuntan hacia adentro. `domain` no importa nada de `application` ni de `infrastructure`. Si mañana cambiás la BD simulada por Postgres, o el pago fake por Stripe, **el dominio y los casos de uso no se tocan**.
+**Regla de oro:** las flechas apuntan hacia adentro. `domain` no importa nada de `application` ni de `infrastructure`. Si mañana cambiás el pago fake por Stripe, **el dominio y los casos de uso no se tocan**. La persistencia ya es Postgres real vía `JpaOrderRepository`; el contrato `OrderRepository` es el mismo que tendría cualquier otra BD.
 
 ## Estructura del proyecto
 
@@ -151,17 +151,20 @@ src/main/java/com/ecommerce/order
 | **Factory method** | `Order.create(...)` encapsula la construcción del agregado |
 | **Command** | Cada caso de uso recibe un comando inmutable (`CreateOrderCommand`) |
 
-## BD simulada
+## Persistencia (Postgres)
 
-`InMemoryOrderRepository` (un `ConcurrentHashMap`) cumple el contrato de `OrderRepository` con el mismo API que tendría una persistencia real. El stock vive en `FakeInventoryAdapter`, que arranca con:
+`JpaOrderRepository` (adapters `jpa`) cumple el contrato de `OrderRepository` contra
+Postgres real, con `Flyway` para las migraciones y `ddl-auto: validate`. El stock vive
+en `FakeInventoryAdapter`, que arranca con:
 
 - `10000000-0000-0000-0000-000000000001` → Notebook (100 uds)
 - `10000000-0000-0000-0000-000000000002` → Mouse (50 uds)
 
 Cualquier otro `productId` responde "sin stock" → la confirmación devuelve **422**.
 
-El snapshot del catálogo vive en `InMemoryCatalogProductStore`, poblado por el
-`CatalogEventConsumer` cuando llegan eventos de catalog-service.
+El snapshot del catálogo vive en `JpaCatalogProductStoreAdapter` (tabla
+`catalog_product_snapshot`), poblado por el `CatalogEventConsumer` cuando llegan
+eventos de catalog-service.
 
 ## Tests
 
@@ -170,16 +173,14 @@ El snapshot del catálogo vive en `InMemoryCatalogProductStore`, poblado por el
 | `domain/model/*Test` | Invariantes del agregado, aritmética de `Money`, tabla de transiciones |
 | `application/service/OrderApplicationServiceTest` | Casos de uso con puertos mockeados: creación (resolviendo nombre/precio del snapshot), pagos rechazados, stock insuficiente, transiciones inválidas, producto no disponible |
 | `infrastructure/adapter/in/web/OrderControllerTest` | Slice web con `@WebMvcTest`: 201/400/404/204 y validación |
-| `OrderServiceIntegrationTest` | End-to-end con el contexto completo: ciclo de vida por la API, stock agotado (422) y producto no disponible (404) |
+| `OrderServiceIT` | End-to-end con el contexto completo + Postgres (Testcontainers): ciclo de vida por la API, stock agotado (422) y producto no disponible (404) |
 | `CatalogEventConsumerIT` | **Con Kafka real (Testcontainers)**: consume eventos y actualiza el snapshot (requiere Docker, corre con `mvn verify`) |
 
 Cobertura: `./mvnw verify` genera el reporte en `target/site/jacoco/index.html`. El dominio (la parte que más te conviene proteger) tiene cobertura casi total.
 
 ## Cómo evolucionar el ejemplo
 
-- **Conectar Postgres**: creá `JpaOrderRepository implements OrderRepository` y cambiá el adapter. Nada más.
 - **Agregar Stripe**: implementá `PaymentPort` con el SDK real, o agregá una `PaymentStrategy` nueva.
-- **Persistir el snapshot**: `CatalogProductStore` ya es un puerto; cambiá `InMemoryCatalogProductStore` por un adapter con BD.
 - **Manejar mensajes "venenos"**: en producción conviene envolver el deserializador con `ErrorHandlingDeserializer` + un recoverer para no frenar el consumo ante un evento corrupto.
 
 ## Contexto del ecosistema
@@ -191,6 +192,6 @@ Kafka) y `warehouse-service` (esqueleto, segundo consumidor). El endgame es
 **idempotencia** del consumidor, **Saga** para el flujo de compra y API Gateway.
 Ver [../PLAN.md](../PLAN.md).
 
-> **Próximo paso de este micro**: tenancy. El evento ya trae `companyId` (y la key
-> del topic es `companyId:productId`), pero el snapshot y las órdenes todavía son
-> ciegos al tenant. Falta aplicar el patrón `CompanyContext` que catalog ya usa.
+> **Estado de este micro**: completo v1 con **tenancy por `CompanyId`** e
+> **idempotencia** del consumidor (dedupe por `eventId`). Próximo paso a nivel
+> ecosistema: patrón **Saga** para el flujo de compra.

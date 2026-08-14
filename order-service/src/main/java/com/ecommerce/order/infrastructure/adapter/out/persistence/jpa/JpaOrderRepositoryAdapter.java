@@ -11,7 +11,6 @@ import com.ecommerce.order.domain.model.OrderStatus;
 import com.ecommerce.order.domain.model.PaymentMethod;
 import com.ecommerce.order.domain.model.ProductId;
 import com.ecommerce.order.domain.repository.OrderRepository;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,7 +21,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Component
-@Profile("postgres")
 public class JpaOrderRepositoryAdapter implements OrderRepository {
 
     private final JpaOrderRepository jpa;

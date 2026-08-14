@@ -5,8 +5,8 @@ Ejemplo didáctico de un microservicio Spring Boot (Java 17) con **Arquitectura 
 ## Quick path
 
 ```bash
-./mvnw verify                 # unitarios + integración + ITs con Testcontainers
-./mvnw test                   # solo unitarios + integración web (sin Docker)
+./mvnw verify                 # unitarios + ITs con Testcontainers (Postgres + Kafka, requiere Docker)
+./mvnw test                   # solo unitarios + slices web (sin Docker)
 ./mvnw spring-boot:run        # levanta el servicio en http://localhost:8082
 ```
 
@@ -80,8 +80,8 @@ Consumidor (order-service) en `infrastructure/adapter/in/kafka/CatalogProductEve
                      │              INFRAESTRUCTURE             │
                      │  (adapters: lo que cambia)               │
    HTTP ───────────► │  web/ProductController, CategoryController │
-                     │  out/persistence/InMemory    ← puerto OUT │
-                     │  out/kafka/KafkaEventPublisher → Kafka    │
+                     │  out/persistence/jpa  ← puerto OUT         │
+                     │  out/kafka/OutboxPoller → Kafka            │
                      └──────────────┬───────────────────────────┘
                                     │ depende de interfaces (puertos)
                      ┌──────────────▼───────────────────────────┐
@@ -121,18 +121,17 @@ de uso no se tocan.
 | Suite | Qué cubre |
 |---|---|
 | `domain/model/*Test` | Invariantes de `Product`, `Category`, aritmética de `Money`, tabla de transiciones |
-| `application/service/CatalogApplicationServiceTest` | Los 11 casos de uso con repositorios en memoria |
+| `application/service/CatalogApplicationServiceTest` | Los 11 casos de uso con puertos mockeados |
 | `infrastructure/adapter/in/web/*ControllerTest` | Slice web: 201/400/404, validación y search paginado |
-| `CatalogServiceIntegrationTest` | End-to-end por la API con el publisher mockeado |
-| `KafkaEventPublisherIT` | **Con Kafka real (Testcontainers)**: publica y verifica el evento con nombre/precio/status correctos |
+| `CatalogServiceIT` | End-to-end por la API con el contexto completo + Postgres (Testcontainers) |
+| `OutboxPublisherIT` | **Con Kafka real (Testcontainers)**: guarda el producto, publica vía Outbox y verifica el evento con nombre/precio/status correctos |
 | `KafkaPartitioningIT` | **Con Kafka real**: verifica el particionado por key (`companyId:productId`) |
 | `CatalogProductContractIT` | **Prueba de contrato (consumer-driven)**: el JSON publicado tiene los campos que order espera, fechas ISO-8601 y key `companyId:productId` |
 
 ## Cómo evolucionar el ejemplo
 
-- **Conectar Postgres**: creá `JpaProductRepository` / `JpaCategoryRepository` y cambiá los adapters. Nada más.
 - **Agregar búsqueda con Elasticsearch**: implementá el puerto de búsqueda con otro adapter.
-- **Publicar a otro broker**: cambiá `KafkaEventPublisher` por otro adapter; el caso de uso no se entera.
+- **Publicar a otro broker**: cambiá el `OutboxPoller` (o el `KafkaTemplate` que inyecta) por otro adapter; el caso de uso no se entera.
 
 ## Contexto del ecosistema
 
@@ -140,6 +139,7 @@ Este es uno de los micros del ecommerce. Construidos: `catalog-service` (este
 micro), `order-service` (consume `catalog.products` para mantener su snapshot y
 resolver precios al crear órdenes) y `warehouse-service` (esqueleto, segundo
 consumidor). El endgame es **cerrar en estos 3 micros** y luego la capa
-transversal: patrón **Outbox** (hoy se publica directo a Kafka, sin transacción),
-**idempotencia** del consumidor, **Saga** para el flujo de compra y API Gateway.
+transversal: patrón **Outbox** (✅ hecho: tabla `outbox_event` + poller, el evento
+se persiste en la misma TX que el `save` del producto),
+**idempotencia** del consumidor (✅), **Saga** para el flujo de compra y API Gateway.
 Ver [../PLAN.md](../PLAN.md).

@@ -6,7 +6,6 @@ import com.ecommerce.order.domain.model.CatalogProductStatus;
 import com.ecommerce.order.domain.model.CompanyId;
 import com.ecommerce.order.domain.model.Money;
 import com.ecommerce.order.domain.model.ProductId;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,7 +13,6 @@ import java.util.Currency;
 import java.util.Optional;
 
 @Component
-@Profile("postgres")
 public class JpaCatalogProductStoreAdapter implements CatalogProductStore {
 
     private final JpaCatalogProductSnapshotRepository jpa;
